@@ -51,6 +51,16 @@ app.post('/api/admin/dealers', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
+app.put('/api/admin/dealers/:id', authMiddleware, (req, res) => {
+    database.updateDealer(req.params.id, req.body);
+    res.json({ success: true });
+});
+
+app.put('/api/admin/users/:id', authMiddleware, (req, res) => {
+    database.updateUser(req.params.id, req.body);
+    res.json({ success: true });
+});
+
 app.post('/api/dealer/users', authMiddleware, (req, res) => {
     database.createUser({ ...req.body.userData, dealerId: req.user.id, wallet: req.body.initialDeposit });
     res.json({ success: true });
