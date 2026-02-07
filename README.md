@@ -1,88 +1,59 @@
 # 🎯 A-Baba Exchange — Setup & Deployment Guide
 
-## 🛠 Step 0: Replacement Guide (Read First)
-To replace your existing project files with this version in your Google Cloud Shell:
+## 🔍 Where are my AI Studio files in the Shell?
+The files you see in the AI Studio side panel correspond to specific locations in your Google Cloud Shell project. Use the map below to find them:
 
-1. **Clean the directory**:
+### 1. The Root Folder (`/`)
+*Contains UI configuration and project settings.*
+- **index.tsx / App.tsx**: Your main React interface code.
+- **index.html**: The master HTML file.
+- **Dockerfile**: (Renamed from Dockerfile.js) The build instructions for Cloud Run.
+- **package.json**: Lists your frontend libraries (React, Vite).
+
+### 2. The Backend Folder (`/backend`)
+*Navigate using `cd backend`. This is the "Server" side.*
+- **server.js**: The main API engine.
+- **database.js**: Your SQLite logic.
+- **database.sqlite**: Your live database file (will appear after first run).
+
+### 3. The Components Folder (`/components`)
+*Contains the UI panels.*
+- **AdminPanel.tsx**, **DealerPanel.tsx**, **UserPanel.tsx**.
+
+---
+
+## 🛠 Step 0: File Replacement Guide
+If you are moving files from AI Studio to your Shell, follow these terminal commands:
+
+1. **Delete old structure**:
    ```bash
    rm -rf backend components hooks *.ts *.tsx *.json *.js *.css *.html .dockerignore Dockerfile deploy.sh
    ```
-2. **Re-create the structure**:
+2. **Re-create folders**:
    ```bash
    mkdir -p backend components hooks
    ```
-3. **Paste the contents**: Open each file in the AI Studio editor, copy the content, and save it into the corresponding file path in your environment.
-4. **Install Dependencies**:
+3. **Copy/Paste Tip**: Open the file in the Cloud Shell Editor (the pencil icon), create a new file with the exact same name, and paste the code from AI Studio.
+
+4. **Install and Setup**:
    ```bash
    npm install && cd backend && npm install && cd ..
    ```
-5. **Initialize Database**:
-   ```bash
-   cd backend && npm run db:setup && cd ..
-   ```
 
 ---
 
-## 📂 Project File Map (Finding your files in Shell)
-In your Google Cloud Shell project folder, the files are organized as follows:
+## 🚀 Deployment Fix (Build Failed)
+If your build failed, it was likely because the file was named `Dockerfile.js` instead of `Dockerfile`. I have fixed this. To deploy now:
 
-### 🌐 Root Directory (Frontend & Build)
-These files control the User Interface and the project build settings.
-- `index.tsx` & `App.tsx`: The main React entry points.
-- `index.html`: The base HTML template.
-- `constants.tsx`: Logos, colors, and global icons.
-- `types.ts`: Data structures for Users, Bets, and Games.
-- `package.json`: Frontend library dependencies.
-- `vite.config.ts` & `tailwind.config.js`: Build and styling configurations.
-- `Dockerfile`: Instructions for Google Cloud to build your container.
-
-### 🖥️ /backend Directory (Server & Database)
-Navigate here using `cd backend`. These files control the "brain" of the app.
-- `server.js`: The Express API server (the main backend file).
-- `database.js`: Logic for SQLite database queries.
-- `authMiddleware.js`: Security logic for logins.
-- `setup-database.js`: Script to initialize your DB from `db.json`.
-- `database.sqlite`: **(Generated)** This is your actual live database file.
-
-### 🧩 /components & /hooks
-- `components/`: Individual UI panels (AdminPanel.tsx, DealerPanel.tsx, etc.).
-- `hooks/`: Functional logic for Auth and Countdowns.
-
-### 🔍 Useful Shell Commands
-- **List all files**: `ls -R`
-- **Go to Backend**: `cd backend`
-- **Go back to Root**: `cd ..`
-- **Check if DB exists**: `ls backend/*.sqlite`
-
----
-
-## 🚀 Google Cloud Deployment
-
-### 1. Enable Cloud APIs
-```bash
-gcloud services enable run.googleapis.com \
-                       containerregistry.googleapis.com \
-                       cloudbuild.googleapis.com
-```
-
-### 2. Deploy to Cloud Run
-Run the included `deploy.sh` script:
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
 ```
 
 ### 📋 Deployment Specs
-- **Memory**: 2Gi (Required for Vite build and SQLite compilation)
+- **Memory**: 2Gi
 - **CPU**: 2 vCPUs
 - **Region**: us-central1
-- **Runtime**: Node.js 20
-
----
-
-## 🔒 Security Best Practices
-- **JWT_SECRET**: Change the secret in `deploy.sh` to a long random string.
-- **SQLite Persistence**: Cloud Run storage is temporary. For permanent data, migrate the `database.js` logic to use Google Cloud SQL (MySQL/PostgreSQL).
-- **API Key**: Ensure the `GOOGLE_API_KEY` in `deploy.sh` is your active Gemini API key.
+- **API Key**: Automatically uses the key in `deploy.sh`.
 
 © 2024 A-Baba Exchange Technical Ops.
