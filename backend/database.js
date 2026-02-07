@@ -1,9 +1,11 @@
 
 const path = require('path');
+const fs = require('fs');
 const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
 const DB_PATH = path.join(__dirname, 'database.sqlite');
+const JSON_DB_PATH = path.join(__dirname, 'db.json');
 let db;
 
 function isGameOpen(drawTime) {
@@ -26,11 +28,11 @@ function isGameOpen(drawTime) {
 const connect = () => {
     try {
         db = new Database(DB_PATH);
-        // Optimization: WAL mode + Relaxed Sync for high performance
         db.pragma('journal_mode = WAL');
         db.pragma('synchronous = NORMAL');
         db.pragma('cache_size = 2000');
         db.pragma('foreign_keys = ON');
+        
         db.exec(`
             CREATE TABLE IF NOT EXISTS admins (id TEXT PRIMARY KEY, name TEXT, password TEXT, wallet REAL, prizeRates TEXT, avatarUrl TEXT);
             CREATE TABLE IF NOT EXISTS dealers (id TEXT PRIMARY KEY, name TEXT, password TEXT, area TEXT, contact TEXT, wallet REAL, commissionRate REAL, isRestricted INTEGER DEFAULT 0, prizeRates TEXT, avatarUrl TEXT);
@@ -40,6 +42,38 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY, accountId TEXT, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
             CREATE TABLE IF NOT EXISTS number_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, gameType TEXT, numberValue TEXT, limitAmount REAL, UNIQUE(gameType, numberValue));
         `);
+
+        // AUTO-SEED LOGIC: If games table is empty, load from db.json
+        const gameCount = db.prepare("SELECT count(*) as count FROM games").get();
+        if (gameCount.count === 0 && fs.existsSync(JSON_DB_PATH)) {
+            console.log(">>> SEEDING DATABASE FROM DB.JSON <<<");
+            const data = JSON.parse(fs.readFileSync(JSON_DB_PATH, 'utf-8'));
+            
+            db.transaction(() => {
+                // Seed Admin
+                if (data.admin) {
+                    db.prepare('INSERT OR IGNORE INTO admins (id, name, password, wallet, prizeRates, avatarUrl) VALUES (?, ?, ?, ?, ?, ?)').run(
+                        data.admin.id, data.admin.name, data.admin.password, data.admin.wallet, JSON.stringify(data.admin.prizeRates), data.admin.avatarUrl
+                    );
+                }
+
+                // Seed Games
+                if (data.games) {
+                    const insertGame = db.prepare('INSERT INTO games (id, name, drawTime) VALUES (?, ?, ?)');
+                    data.games.forEach(g => insertGame.run(g.id, g.name, g.drawTime));
+                }
+
+                // Seed Initial Dealer if present
+                if (data.dealers && data.dealers.length > 0) {
+                    const d = data.dealers[0];
+                    db.prepare('INSERT OR IGNORE INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+                        d.id, d.name, d.password, d.area, d.contact, d.wallet, d.commissionRate, JSON.stringify(d.prizeRates), d.avatarUrl
+                    );
+                }
+            })();
+            console.log(">>> SEEDING COMPLETE <<<");
+        }
+
     } catch (error) {
         console.error('Database connection error:', error);
         process.exit(1);
@@ -51,14 +85,13 @@ const findAccountById = (id, table, ledgerLimit = 50) => {
     const account = stmt.get(id);
     if (!account) return null;
     if (table !== 'games') {
-        // PERFORMANCE FIX: Never return the whole history in standard calls
         account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).reverse();
     } else {
         account.isMarketOpen = isGameOpen(account.drawTime);
     }
     if (['users', 'dealers', 'admins'].includes(table)) {
-        if (account.prizeRates) account.prizeRates = JSON.parse(account.prizeRates);
-        if (account.betLimits) account.betLimits = JSON.parse(account.betLimits);
+        if (account.prizeRates && typeof account.prizeRates === 'string') account.prizeRates = JSON.parse(account.prizeRates);
+        if (account.betLimits && typeof account.betLimits === 'string') account.betLimits = JSON.parse(account.betLimits);
         account.isRestricted = !!account.isRestricted;
     }
     return account;
@@ -72,7 +105,7 @@ const addLedgerEntry = (accountId, type, desc, debit, credit, newBalance) => {
 
 const placeBet = (userId, gameId, betGroups) => {
     return db.transaction(() => {
-        const user = findAccountById(userId, 'users', 0); // Don't need ledger for bet check
+        const user = findAccountById(userId, 'users', 0);
         if (!user) throw new Error("User not found");
         if (user.isRestricted) throw new Error("Account restricted");
 
@@ -107,7 +140,7 @@ const updateWallet = (id, table, amount, type) => {
         if (!account) throw new Error("Account not found");
         const newBalance = type === 'credit' ? account.wallet + amount : account.wallet - amount;
         if (newBalance < 0) throw new Error("Insufficient funds");
-        db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
+        db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?').run(newBalance, id);
         addLedgerEntry(id, table.slice(0, -1).toUpperCase(), type === 'credit' ? 'Wallet Top-up' : 'Wallet Withdrawal', type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
         return newBalance;
     })();
@@ -125,9 +158,9 @@ module.exports = {
     },
     getAllFromTable: (table) => {
         return db.prepare(`SELECT * FROM ${table}`).all().map(a => {
-            if (a.prizeRates) a.prizeRates = JSON.parse(a.prizeRates);
-            if (a.betLimits) a.betLimits = JSON.parse(a.betLimits);
-            if (a.numbers) a.numbers = JSON.parse(a.numbers);
+            if (a.prizeRates && typeof a.prizeRates === 'string') a.prizeRates = JSON.parse(a.prizeRates);
+            if (a.betLimits && typeof a.betLimits === 'string') a.betLimits = JSON.parse(a.betLimits);
+            if (a.numbers && typeof a.numbers === 'string') a.numbers = JSON.parse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
             return a;
         });
