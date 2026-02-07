@@ -24,21 +24,33 @@ const parseAccountDates = (acc: any) => {
     return acc;
 };
 
+// Safe helper for localStorage
+const getStoredToken = () => {
+    try {
+        return localStorage.getItem('authToken');
+    } catch (e) {
+        console.warn("LocalStorage access denied by device settings.");
+        return null;
+    }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [role, setRole] = useState<Role | null>(null);
     const [account, setAccount] = useState<User | Dealer | Admin | null>(null);
-    const [token, setToken] = useState<string | null>(localStorage.getItem('authToken'));
+    const [token, setToken] = useState<string | null>(getStoredToken());
     const [loading, setLoading] = useState<boolean>(true);
     const [verifyData, setVerifyData] = useState<any>(null);
 
     const logout = useCallback(() => {
         setRole(null); setAccount(null); setToken(null); setVerifyData(null);
-        localStorage.removeItem('authToken');
+        try {
+            localStorage.removeItem('authToken');
+        } catch (e) {}
     }, []);
     
     const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
         const headers = new Headers(options.headers || {});
-        const currentToken = token || localStorage.getItem('authToken');
+        const currentToken = token || getStoredToken();
         if (currentToken) headers.append('Authorization', `Bearer ${currentToken}`);
         if (!headers.has('Content-Type') && !(options.body instanceof FormData)) headers.append('Content-Type', 'application/json');
         
@@ -56,9 +68,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let poll: ReturnType<typeof setInterval>;
         const verify = async () => {
-            if (!token) { setLoading(false); return; }
+            const currentToken = getStoredToken();
+            if (!currentToken) { setLoading(false); return; }
             try {
-                const response = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${token}` } });
+                const response = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${currentToken}` } });
                 if (!response.ok) throw new Error('Fail');
                 const data = await response.json();
                 setAccount(parseAccountDates(data.account));
@@ -66,19 +79,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setVerifyData(data);
                 setLoading(false);
 
-                // PERFORMANCE OPTIMIZATION: Use 10s polling instead of 2s
-                if (data.role !== Role.Admin) {
-                    poll = setInterval(async () => {
-                        const r = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${token}` }});
-                        if (r.ok) { const d = await r.json(); setAccount(parseAccountDates(d.account)); }
-                        else logout();
-                    }, 10000); 
-                }
-            } catch (e) { logout(); setLoading(false); }
+                // Start polling for balance updates
+                poll = setInterval(async () => {
+                    const r = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${currentToken}` }});
+                    if (r.ok) { 
+                        const d = await r.json(); 
+                        setAccount(parseAccountDates(d.account)); 
+                    } else if (r.status === 401) {
+                        logout();
+                    }
+                }, 10000); 
+            } catch (e) { 
+                logout(); 
+                setLoading(false); 
+            }
         };
         verify();
         return () => poll && clearInterval(poll);
-    }, [token, logout]);
+    }, [logout]);
 
     const login = async (id: string, pass: string) => {
         const response = await fetch('/api/auth/login', {
@@ -86,16 +104,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ loginId: id, password: pass })
         });
-        if (!response.ok) throw new Error("Login failed");
+        if (!response.ok) throw new Error("Login failed. Check ID/Password.");
         const data = await response.json();
-        localStorage.setItem('authToken', data.token);
+        try {
+            localStorage.setItem('authToken', data.token);
+        } catch (e) {}
         setAccount(parseAccountDates(data.account));
         setRole(data.role);
         setToken(data.token);
     };
     
     return (
-        <AuthContext.Provider value={{ role, account, token, loading, verifyData, login, logout, setAccount, resetPassword: async (id, c, p) => "Reset logic stub", fetchWithAuth }}>
+        <AuthContext.Provider value={{ 
+            role, account, token, loading, verifyData, login, logout, setAccount, 
+            resetPassword: async (id, c, p) => "Contact Administrator for reset.", 
+            fetchWithAuth 
+        }}>
             {children}
         </AuthContext.Provider>
     );

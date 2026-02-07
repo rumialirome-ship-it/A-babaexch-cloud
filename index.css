@@ -8,6 +8,8 @@ body {
   font-family: 'Russo One', sans-serif;
   background-color: #020617;
   color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .glitch-text {
@@ -17,19 +19,24 @@ body {
 }
 
 @keyframes pan-grid {
-  0% { background-position: 0 0; }
-  100% { background-position: 1000px 1000px; }
+  from { transform: translate(0, 0); }
+  to { transform: translate(-40px, -40px); }
 }
 
 .animated-bg {
   position: fixed;
-  inset: 0;
+  top: -40px;
+  left: -40px;
+  right: -40px;
+  bottom: -40px;
   z-index: -1;
   background-image: 
     linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
-  animation: pan-grid 100s linear infinite;
+  animation: pan-grid 2s linear infinite;
+  pointer-events: none;
+  will-change: transform;
 }
 
 @keyframes reveal-slam {
@@ -40,4 +47,20 @@ body {
 
 .animate-reveal-slam-intense {
   animation: reveal-slam 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Scrollbar styling for a cleaner mobile look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
