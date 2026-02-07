@@ -2,14 +2,18 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const authMiddleware = require('./authMiddleware');
 const database = require('./database');
 
 const app = express();
+
+// Speed up data transfer
+app.use(compression());
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ababa-secure-cloud-9988-secret';
 
@@ -18,7 +22,8 @@ app.post('/api/auth/login', (req, res) => {
     const { loginId, password } = req.body;
     const { account, role } = database.findAccountForLogin(loginId);
     if (account && account.password === password) {
-        const fullAccount = database.findAccountById(account.id, role.toLowerCase() + 's');
+        // Return only limited profile for login speed
+        const fullAccount = database.findAccountById(account.id, role.toLowerCase() + 's', 20);
         const token = jwt.sign({ id: account.id, role }, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ token, role, account: fullAccount });
     }
@@ -27,12 +32,23 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/auth/verify', authMiddleware, (req, res) => {
     const role = req.user.role;
-    const account = database.findAccountById(req.user.id, role.toLowerCase() + 's');
+    // Limit ledger to last 50 entries for verification speed
+    const account = database.findAccountById(req.user.id, role.toLowerCase() + 's', 50);
     if (!account) return res.status(404).json({ message: 'Not found' });
+    
     let extra = {};
-    if (role === 'DEALER') { extra.users = database.findUsersByDealerId(req.user.id); extra.bets = database.findBetsByDealerId(req.user.id); }
-    else if (role === 'USER') { extra.bets = database.findBetsByUserId(req.user.id); }
-    else if (role === 'ADMIN') { extra.dealers = database.getAllFromTable('dealers'); extra.users = database.getAllFromTable('users'); extra.bets = database.getAllFromTable('bets'); }
+    if (role === 'DEALER') { 
+        extra.users = database.findUsersByDealerId(req.user.id); 
+        extra.bets = database.findBetsByDealerId(req.user.id); 
+    }
+    else if (role === 'USER') { 
+        extra.bets = database.findBetsByUserId(req.user.id); 
+    }
+    else if (role === 'ADMIN') { 
+        extra.dealers = database.getAllFromTable('dealers'); 
+        extra.users = database.getAllFromTable('users'); 
+        extra.bets = database.getAllFromTable('bets'); 
+    }
     res.json({ account, role, ...extra });
 });
 
@@ -62,13 +78,6 @@ app.post('/api/dealer/topup/user', authMiddleware, (req, res) => {
     } catch (e) { res.status(400).json({ message: e.message }); }
 });
 
-app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => {
-    try {
-        database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit');
-        res.json({ success: true });
-    } catch (e) { res.status(400).json({ message: e.message }); }
-});
-
 app.put('/api/dealer/users/:id/toggle-restriction', authMiddleware, (req, res) => {
     database.toggleRestriction(req.params.id, 'users');
     res.json({ success: true });
@@ -80,16 +89,11 @@ app.post('/api/admin/games/:id/declare-winner', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/admin/games/:id/approve-payouts', authMiddleware, (req, res) => {
-    database.approvePayouts(req.params.id);
-    res.json({ success: true });
-});
-
 app.get('/api/games', (req, res) => res.json(database.getAllFromTable('games')));
 
 // Frontend
 const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, { maxAge: '1h' })); // Cache static assets
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
@@ -97,4 +101,4 @@ app.get('*', (req, res, next) => {
 
 const port = process.env.PORT || 8080;
 database.connect();
-app.listen(port, '0.0.0.0', () => console.log(`>>> SERVER RUNNING ON ${port} <<<`));
+app.listen(port, '0.0.0.0', () => console.log(`>>> OPTIMIZED SERVER ON ${port} <<<`));

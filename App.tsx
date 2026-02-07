@@ -62,6 +62,7 @@ const AppContent: React.FC = () => {
     
     const [activeReveal, setActiveReveal] = useState<{ name: string; number: string } | null>(null);
     const lastGamesRef = useRef<Game[]>([]);
+    const isFetchingRef = useRef(false);
 
     const parseAllDates = (data: any) => {
         if (!data) return data;
@@ -81,20 +82,31 @@ const AppContent: React.FC = () => {
     }, []);
 
     const fetchPrivateData = useCallback(async () => {
-        if (!role) return;
+        if (!role || isFetchingRef.current) return;
+        isFetchingRef.current = true;
         try {
-            const endpoint = role === Role.Admin ? '/api/admin/data' : (role === Role.Dealer ? '/api/dealer/data' : '/api/user/data');
-            const response = await fetchWithAuth(endpoint);
+            const response = await fetchWithAuth('/api/auth/verify');
             if (response.ok) {
                 const parsedData = parseAllDates(await response.json());
                 if (parsedData.account) setAccount(parsedData.account);
-                if (role === Role.Admin) { setUsers(parsedData.users); setDealers(parsedData.dealers); setBets(parsedData.bets); }
-                else if (role === Role.Dealer) { setUsers(parsedData.users); setBets(parsedData.bets); }
-                else { setBets(parsedData.bets); }
+                if (role === Role.Admin) { 
+                    setUsers(parsedData.users || []); 
+                    setDealers(parsedData.dealers || []); 
+                    setBets(parsedData.bets || []); 
+                }
+                else if (role === Role.Dealer) { 
+                    setUsers(parsedData.users || []); 
+                    setBets(parsedData.bets || []); 
+                }
+                else { 
+                    setBets(parsedData.bets || []); 
+                }
                 setHasInitialFetched(true);
             }
         } catch (error) {
             console.error("Private fetch error", error);
+        } finally {
+            isFetchingRef.current = false;
         }
     }, [role, fetchWithAuth, setAccount]);
 
@@ -110,22 +122,22 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         fetchPublicData();
-        // PERFORMANCE OPTIMIZATION: Slow down public polls to 15s
-        const interval = setInterval(fetchPublicData, 15000);
+        // Public data (games results) doesn't change often, 20s is fine
+        const interval = setInterval(fetchPublicData, 20000);
         return () => clearInterval(interval);
     }, [fetchPublicData]);
 
     useEffect(() => {
         if (role) {
             if (!hasInitialFetched) fetchPrivateData();
-            // PERFORMANCE OPTIMIZATION: Slow down private polls to 10s
-            const interval = setInterval(fetchPrivateData, 10000);
+            // User data (wallet) needs to be consistent, but 15s is better for CPU load
+            const interval = setInterval(fetchPrivateData, 15000);
             return () => clearInterval(interval);
         } else {
             setHasInitialFetched(false);
             setUsers([]); setBets([]); setDealers([]);
         }
-    }, [role, fetchPrivateData]);
+    }, [role, fetchPrivateData, hasInitialFetched]);
 
     useEffect(() => {
         if (games.length > 0 && lastGamesRef.current.length > 0) {
@@ -139,8 +151,10 @@ const AppContent: React.FC = () => {
         lastGamesRef.current = games;
     }, [games]);
 
-    const placeBet = async (d: any) => { await fetchWithAuth('/api/user/bets', { method: 'POST', body: JSON.stringify(d) }); fetchPrivateData(); };
-    const placeBetAsDealer = async (d: any) => { await fetchWithAuth('/api/dealer/bets/bulk', { method: 'POST', body: JSON.stringify(d) }); fetchPrivateData(); };
+    const placeBet = async (d: any) => { 
+        await fetchWithAuth('/api/user/bets', { method: 'POST', body: JSON.stringify(d) }); 
+        fetchPrivateData(); 
+    };
     
     const onSaveUser = async (u: any, o: any, i: any) => {
         const method = o ? 'PUT' : 'POST';
@@ -153,13 +167,7 @@ const AppContent: React.FC = () => {
         fetchPrivateData();
     };
 
-    const onDeleteUser = async (uId: string) => {
-        const response = await fetchWithAuth(`/api/dealer/users/${uId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error("Failed to delete user");
-        fetchPrivateData();
-    };
-
-    if (loading) return <div className="min-h-screen flex items-center justify-center text-cyan-400 text-xl font-bold">Synchronizing Session...</div>;
+    if (loading) return <div className="min-h-screen flex items-center justify-center text-cyan-400 text-xl font-bold">Connecting...</div>;
 
     return (
         <div className="min-h-screen flex flex-col">
@@ -174,11 +182,11 @@ const AppContent: React.FC = () => {
                             <DealerPanel 
                                 dealer={account as Dealer} users={users} 
                                 onSaveUser={onSaveUser} 
-                                onDeleteUser={onDeleteUser}
+                                onDeleteUser={async (uId) => { await fetchWithAuth(`/api/dealer/users/${uId}`, { method: 'DELETE' }); fetchPrivateData(); }}
                                 topUpUserWallet={async (id, amt) => { await fetchWithAuth('/api/dealer/topup/user', { method: 'POST', body: JSON.stringify({ userId: id, amount: amt }) }); fetchPrivateData(); }} 
                                 withdrawFromUserWallet={async (id, amt) => { await fetchWithAuth('/api/dealer/withdraw/user', { method: 'POST', body: JSON.stringify({ userId: id, amount: amt }) }); fetchPrivateData(); }} 
                                 toggleAccountRestriction={async (id) => { await fetchWithAuth(`/api/dealer/users/${id}/toggle-restriction`, { method: 'PUT' }); fetchPrivateData(); }} 
-                                bets={bets} games={games} placeBetAsDealer={placeBetAsDealer} isLoaded={hasInitialFetched}
+                                bets={bets} games={games} placeBetAsDealer={async (d) => { await fetchWithAuth('/api/dealer/bets/bulk', { method: 'POST', body: JSON.stringify(d) }); fetchPrivateData(); }} isLoaded={hasInitialFetched}
                             />
                         )}
                         {role === Role.Admin && (

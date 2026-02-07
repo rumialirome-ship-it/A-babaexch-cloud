@@ -1,11 +1,9 @@
 
 const path = require('path');
-const fs = require('fs');
 const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
 const DB_PATH = path.join(__dirname, 'database.sqlite');
-const JSON_DB_PATH = path.join(__dirname, 'db.json');
 let db;
 
 function isGameOpen(drawTime) {
@@ -28,7 +26,10 @@ function isGameOpen(drawTime) {
 const connect = () => {
     try {
         db = new Database(DB_PATH);
+        // Optimization: WAL mode + Relaxed Sync for high performance
         db.pragma('journal_mode = WAL');
+        db.pragma('synchronous = NORMAL');
+        db.pragma('cache_size = 2000');
         db.pragma('foreign_keys = ON');
         db.exec(`
             CREATE TABLE IF NOT EXISTS admins (id TEXT PRIMARY KEY, name TEXT, password TEXT, wallet REAL, prizeRates TEXT, avatarUrl TEXT);
@@ -39,22 +40,18 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY, accountId TEXT, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
             CREATE TABLE IF NOT EXISTS number_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, gameType TEXT, numberValue TEXT, limitAmount REAL, UNIQUE(gameType, numberValue));
         `);
-        const adminCheck = db.prepare("SELECT count(*) as count FROM admins").get();
-        if (adminCheck.count === 0) {
-            // Default Admin if db.json fails
-            db.prepare('INSERT INTO admins (id, name, password, wallet, prizeRates) VALUES (?, ?, ?, ?, ?)').run('Guru', 'Guru', 'Pak@4646', 1000000, JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 }));
-        }
     } catch (error) {
         console.error('Database connection error:', error);
         process.exit(1);
     }
 };
 
-const findAccountById = (id, table, ledgerLimit = 20) => {
+const findAccountById = (id, table, ledgerLimit = 50) => {
     const stmt = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`);
     const account = stmt.get(id);
     if (!account) return null;
     if (table !== 'games') {
+        // PERFORMANCE FIX: Never return the whole history in standard calls
         account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).reverse();
     } else {
         account.isMarketOpen = isGameOpen(account.drawTime);
@@ -75,7 +72,7 @@ const addLedgerEntry = (accountId, type, desc, debit, credit, newBalance) => {
 
 const placeBet = (userId, gameId, betGroups) => {
     return db.transaction(() => {
-        const user = findAccountById(userId, 'users');
+        const user = findAccountById(userId, 'users', 0); // Don't need ledger for bet check
         if (!user) throw new Error("User not found");
         if (user.isRestricted) throw new Error("Account restricted");
 
@@ -106,7 +103,7 @@ const placeBet = (userId, gameId, betGroups) => {
 
 const updateWallet = (id, table, amount, type) => {
     return db.transaction(() => {
-        const account = findAccountById(id, table);
+        const account = findAccountById(id, table, 0);
         if (!account) throw new Error("Account not found");
         const newBalance = type === 'credit' ? account.wallet + amount : account.wallet - amount;
         if (newBalance < 0) throw new Error("Insufficient funds");
@@ -135,9 +132,9 @@ module.exports = {
             return a;
         });
     },
-    findUsersByDealerId: (id) => db.prepare('SELECT id FROM users WHERE LOWER(dealerId) = LOWER(?)').all(id).map(u => findAccountById(u.id, 'users')),
-    findBetsByUserId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?)').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
-    findBetsByDealerId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?)').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
+    findUsersByDealerId: (id) => db.prepare('SELECT id FROM users WHERE LOWER(dealerId) = LOWER(?)').all(id).map(u => findAccountById(u.id, 'users', 10)),
+    findBetsByUserId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC LIMIT 100').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
+    findBetsByDealerId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?) ORDER BY timestamp DESC LIMIT 200').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
     createUser: (u) => {
         db.prepare('INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, prizeRates, betLimits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
             u.id, u.name, u.password, u.dealerId, u.area, u.contact, u.wallet, u.commissionRate, JSON.stringify(u.prizeRates), JSON.stringify(u.betLimits)
@@ -150,7 +147,6 @@ module.exports = {
     approvePayouts: (gameId) => {
         db.transaction(() => {
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
-            // In a real app, logic for adding winnings to user wallets goes here
         })();
     },
     toggleRestriction: (id, table) => {
