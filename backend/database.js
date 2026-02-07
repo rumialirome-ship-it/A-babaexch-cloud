@@ -10,6 +10,7 @@ let db;
 
 function isGameOpen(drawTime) {
     const now = new Date();
+    // PKT is UTC+5. Simulate PKT bias for logical calculations.
     const pktBias = new Date(now.getTime() + (5 * 60 * 60 * 1000));
     const [drawH, drawM] = drawTime.split(':').map(Number);
     const pktH = pktBias.getUTCHours();
@@ -28,6 +29,7 @@ function isGameOpen(drawTime) {
 const connect = () => {
     try {
         db = new Database(DB_PATH);
+        // Optimization: WAL mode + Relaxed Sync for high performance
         db.pragma('journal_mode = WAL');
         db.pragma('synchronous = NORMAL');
         db.pragma('cache_size = 2000');
@@ -80,18 +82,25 @@ const connect = () => {
     }
 };
 
+const safeJsonParse = (str) => {
+    if (typeof str !== 'string') return str;
+    try { return JSON.parse(str); } catch (e) { return str; }
+};
+
 const findAccountById = (id, table, ledgerLimit = 50) => {
     const stmt = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`);
     const account = stmt.get(id);
     if (!account) return null;
+    
     if (table !== 'games') {
         account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).reverse();
     } else {
         account.isMarketOpen = isGameOpen(account.drawTime);
     }
+    
     if (['users', 'dealers', 'admins'].includes(table)) {
-        if (account.prizeRates && typeof account.prizeRates === 'string') account.prizeRates = JSON.parse(account.prizeRates);
-        if (account.betLimits && typeof account.betLimits === 'string') account.betLimits = JSON.parse(account.betLimits);
+        account.prizeRates = safeJsonParse(account.prizeRates);
+        account.betLimits = safeJsonParse(account.betLimits);
         account.isRestricted = !!account.isRestricted;
     }
     return account;
@@ -104,7 +113,7 @@ const addLedgerEntry = (accountId, type, desc, debit, credit, newBalance) => {
 };
 
 const placeBet = (userId, gameId, betGroups) => {
-    return db.transaction(() => {
+    const txn = db.transaction(() => {
         const user = findAccountById(userId, 'users', 0);
         if (!user) throw new Error("User not found");
         if (user.isRestricted) throw new Error("Account restricted");
@@ -123,27 +132,33 @@ const placeBet = (userId, gameId, betGroups) => {
         const newBalance = user.wallet - totalStake;
         db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, userId);
 
+        const insertBet = db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        
         betGroups.forEach(group => {
-            db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            insertBet.run(
                 uuidv4(), userId, user.dealerId, gameId, group.subGameType, JSON.stringify(group.numbers), group.amountPerNumber, group.numbers.length * group.amountPerNumber, new Date().toISOString()
             );
         });
 
         addLedgerEntry(userId, 'USER', `Bet placed on ${game.name}`, totalStake, 0, newBalance);
         return { success: true, newBalance };
-    })();
+    });
+    return txn();
 };
 
 const updateWallet = (id, table, amount, type) => {
-    return db.transaction(() => {
+    const txn = db.transaction(() => {
         const account = findAccountById(id, table, 0);
         if (!account) throw new Error("Account not found");
         const newBalance = type === 'credit' ? account.wallet + amount : account.wallet - amount;
         if (newBalance < 0) throw new Error("Insufficient funds");
-        db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?').run(newBalance, id);
+        
+        db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
+        
         addLedgerEntry(id, table.slice(0, -1).toUpperCase(), type === 'credit' ? 'Wallet Top-up' : 'Wallet Withdrawal', type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
         return newBalance;
-    })();
+    });
+    return txn();
 };
 
 module.exports = {
@@ -158,16 +173,16 @@ module.exports = {
     },
     getAllFromTable: (table) => {
         return db.prepare(`SELECT * FROM ${table}`).all().map(a => {
-            if (a.prizeRates && typeof a.prizeRates === 'string') a.prizeRates = JSON.parse(a.prizeRates);
-            if (a.betLimits && typeof a.betLimits === 'string') a.betLimits = JSON.parse(a.betLimits);
-            if (a.numbers && typeof a.numbers === 'string') a.numbers = JSON.parse(a.numbers);
+            a.prizeRates = safeJsonParse(a.prizeRates);
+            a.betLimits = safeJsonParse(a.betLimits);
+            a.numbers = safeJsonParse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
             return a;
         });
     },
     findUsersByDealerId: (id) => db.prepare('SELECT id FROM users WHERE LOWER(dealerId) = LOWER(?)').all(id).map(u => findAccountById(u.id, 'users', 10)),
-    findBetsByUserId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC LIMIT 100').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
-    findBetsByDealerId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?) ORDER BY timestamp DESC LIMIT 200').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers) })),
+    findBetsByUserId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC LIMIT 100').all(id).map(b => ({ ...b, numbers: safeJsonParse(b.numbers) })),
+    findBetsByDealerId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?) ORDER BY timestamp DESC LIMIT 200').all(id).map(b => ({ ...b, numbers: safeJsonParse(b.numbers) })),
     createUser: (u) => {
         db.prepare('INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, prizeRates, betLimits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
             u.id, u.name, u.password, u.dealerId, u.area, u.contact, u.wallet, u.commissionRate, JSON.stringify(u.prizeRates), JSON.stringify(u.betLimits)
