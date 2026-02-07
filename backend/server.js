@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -69,6 +70,14 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
     res.json({ account, role, ...extra });
 });
 
+// System time endpoint to help mobile devices with incorrect internal clocks
+app.get('/api/system/time', (req, res) => {
+    res.json({ 
+        serverTime: new Date().toISOString(),
+        pktOffset: PKT_OFFSET_HOURS 
+    });
+});
+
 app.post('/api/user/ai-lucky-pick', authMiddleware, async (req, res) => {
     const { gameType, count = 5 } = req.body;
     const API_KEY = process.env.GOOGLE_API_KEY || process.env.API_KEY;
@@ -93,7 +102,7 @@ app.get('/api/games', (req, res) => res.json(database.getAllFromTable('games')))
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-// Fallback for SPA routing
+// Fallback for SPA routing - Fixes "Not Found" on mobile refresh
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
