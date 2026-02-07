@@ -1,0 +1,5 @@
+{
+  "name": "A-Baba Exchange Cloud",
+  "description": "Enterprise-grade digital lottery platform deployed on Google Cloud Run.",
+  "requestFramePermissions": []
+}
