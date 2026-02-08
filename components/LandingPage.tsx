@@ -22,7 +22,7 @@ const GameDisplayCard: React.FC<{ game: Game; onClick: () => void }> = ({ game, 
     return (
         <button
             onClick={onClick}
-            className={`relative group bg-slate-800/40 p-4 sm:p-6 flex flex-col items-center justify-between text-center transition-all duration-300 border border-slate-700 w-full overflow-hidden hover:border-cyan-500/50 shadow-lg`}
+            className={`relative group bg-slate-800/40 p-4 sm:p-6 flex flex-col items-center justify-between text-center transition-all duration-300 border border-slate-700 w-full overflow-hidden hover:border-cyan-500/50 shadow-lg active:scale-95 active:bg-slate-800/60`}
             style={{
                 clipPath: 'polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)',
             }}
@@ -91,7 +91,7 @@ const LoginPanel: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPasswo
         <div className="bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 overflow-hidden w-full max-w-sm mx-auto">
             <div className="p-1 flex bg-slate-900/50">
                 {roles.map(role => (
-                    <button key={role.name} onClick={() => { setActiveTab(role.name); setError(null); }} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === role.name ? `bg-slate-800 ${role.theme.text} shadow-inner` : 'text-slate-500 hover:text-white'}`}>
+                    <button key={role.name} onClick={() => { setActiveTab(role.name); setError(null); }} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 ${activeTab === role.name ? `bg-slate-800 ${role.theme.text} shadow-inner` : 'text-slate-500 hover:text-white'}`}>
                         {role.name}
                     </button>
                 ))}
@@ -105,17 +105,17 @@ const LoginPanel: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPasswo
                     <div>
                          <div className="flex justify-between items-center mb-1">
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Password</label>
-                            <button type="button" onClick={onForgotPassword} className="text-[10px] font-black text-slate-600 hover:text-cyan-400 uppercase tracking-tighter">Forgot?</button>
+                            <button type="button" onClick={onForgotPassword} className="text-[10px] font-black text-slate-600 hover:text-cyan-400 uppercase tracking-tighter active:opacity-50 transition-opacity">Forgot?</button>
                         </div>
                         <div className="relative">
                             <input type={isPasswordVisible ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className={`w-full bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-white text-sm focus:ring-2 ${activeRole.theme.ring} pr-10`} placeholder="••••••" />
-                             <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500">
+                             <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 active:scale-75 transition-transform">
                                 {isPasswordVisible ? Icons.eyeOff : Icons.eye}
                             </button>
                         </div>
                     </div>
                     {error && <p className="text-[10px] text-red-400 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">{error}</p>}
-                    <button type="submit" className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg text-xs uppercase tracking-widest bg-gradient-to-r ${activeRole.theme.button} hover:scale-105 active:scale-95`}>
+                    <button type="submit" className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg text-xs uppercase tracking-widest bg-gradient-to-r ${activeRole.theme.button} hover:scale-105 active:scale-95 active:brightness-90`}>
                         Authenticate
                     </button>
                 </form>
@@ -148,7 +148,7 @@ const LandingPage: React.FC<{ games: Game[] }> = ({ games }) => {
 
             <section id="login" className="w-full max-w-sm mx-auto flex flex-col gap-4">
                 <LoginPanel onForgotPassword={() => {}} />
-                <button onClick={() => setIsAdminModalOpen(true)} className="w-full text-red-500 font-black py-3 px-4 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-all text-[10px] uppercase tracking-widest">
+                <button onClick={() => setIsAdminModalOpen(true)} className="w-full text-red-500 font-black py-3 px-4 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-all text-[10px] uppercase tracking-widest active:scale-95 active:bg-red-500/20">
                     Authorized Admins Only
                 </button>
             </section>

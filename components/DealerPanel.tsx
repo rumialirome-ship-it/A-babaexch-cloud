@@ -14,7 +14,7 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
             <div className={`bg-slate-900/95 rounded-xl shadow-2xl w-full border border-${themeColor}-500/30 ${sizeClasses[size]} flex flex-col my-auto max-h-[95vh]`}>
                 <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-700 flex-shrink-0">
                     <h3 className={`text-base sm:text-lg font-bold text-${themeColor}-400 uppercase tracking-widest`}>{title}</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white p-1">{Icons.close}</button>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white p-1 active:scale-75 transition-transform">{Icons.close}</button>
                 </div>
                 <div className="p-4 sm:p-6 overflow-y-auto">{children}</div>
             </div>
@@ -34,7 +34,7 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
         }`}>
             <span className="text-xl shrink-0">{type === 'success' ? '✅' : '⚠️'}</span>
             <span className="font-semibold text-sm">{message}</span>
-            <button onClick={onClose} className="ml-auto opacity-50 hover:opacity-100 p-1">{Icons.close}</button>
+            <button onClick={onClose} className="ml-auto opacity-50 hover:opacity-100 p-1 active:scale-75 transition-transform">{Icons.close}</button>
         </div>
     );
 };
@@ -238,7 +238,7 @@ export const UserForm: React.FC<{
                 <div className="sm:col-span-1 relative">
                     <label className={labelClass}>{user ? "Change Password (optional)" : "Password"}</label>
                     <input type={isPasswordVisible ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className={inputClass} required={!user} />
-                    <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute right-3 top-7 text-slate-500">{isPasswordVisible ? Icons.eyeOff : Icons.eye}</button>
+                    <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute right-3 top-7 text-slate-500 active:scale-90 transition-transform">{isPasswordVisible ? Icons.eyeOff : Icons.eye}</button>
                 </div>
                 <div className="sm:col-span-1">
                     <label className={labelClass}>Confirm Password</label>
@@ -288,8 +288,8 @@ export const UserForm: React.FC<{
             </div>
 
             <div className="flex justify-end gap-3 pt-2 border-t border-slate-700">
-                <button type="button" onClick={onCancel} className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm transition-all">Cancel</button>
-                <button type="submit" disabled={isLoading} className="flex-[2] sm:flex-none px-10 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30">
+                <button type="button" onClick={onCancel} className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm transition-all active:scale-95">Cancel</button>
+                <button type="submit" disabled={isLoading} className="flex-[2] sm:flex-none px-10 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 active:scale-95 active:bg-emerald-700">
                     {isLoading ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> Processing...</> : user ? "Update Profile" : "Create User"}
                 </button>
             </div>
@@ -313,11 +313,11 @@ const MoreOptionsDropdown: React.FC<{
         return () => document.removeEventListener('mousedown', clickOut);
     }, []);
 
-    const btnClass = "w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-slate-700 transition-colors flex items-center gap-3";
+    const btnClass = "w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-slate-700 transition-colors flex items-center gap-3 active:bg-slate-600 transition-all";
 
     return (
         <div className="relative inline-block" ref={dropdownRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-slate-700/50 rounded-lg transition-all text-slate-400 hover:text-white border border-transparent hover:border-slate-600">
+            <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-slate-700/50 rounded-lg transition-all text-slate-400 hover:text-white border border-transparent hover:border-slate-600 active:scale-90">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
             </button>
             {isOpen && (
@@ -396,7 +396,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
           </div>
           <div className="bg-slate-800/50 p-1 rounded-lg flex items-center space-x-1 border border-slate-700 w-full md:w-auto overflow-x-auto no-scrollbar">
             {tabs.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`shrink-0 flex items-center space-x-2 py-2 px-3 sm:px-4 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-md transition-all ${activeTab === tab.id ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}>
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`shrink-0 flex items-center space-x-2 py-2 px-3 sm:px-4 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-md transition-all active:scale-95 ${activeTab === tab.id ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}>
                     {tab.icon} <span>{tab.label}</span>
                 </button>
             ))}
@@ -412,7 +412,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
                     <input type="text" placeholder="Search accounts..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-emerald-500" />
                 </div>
-                <button onClick={() => { setSelectedUser(undefined); setIsUserModalOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg font-black px-4 sm:px-6 transition-all shadow-xl shadow-emerald-900/20 whitespace-nowrap text-xs uppercase tracking-widest">New User</button>
+                <button onClick={() => { setSelectedUser(undefined); setIsUserModalOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg font-black px-4 sm:px-6 transition-all shadow-xl shadow-emerald-900/20 whitespace-nowrap text-xs uppercase tracking-widest active:scale-95 active:bg-emerald-700">New User</button>
             </div>
           </div>
 
@@ -473,10 +473,10 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
             </div>
           </div>
           <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <button onClick={() => setIsTopUpModalOpen(true)} className="flex-1 sm:flex-none bg-slate-800 hover:bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 p-3 px-6 rounded-xl font-black transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest">
+                <button onClick={() => setIsTopUpModalOpen(true)} className="flex-1 sm:flex-none bg-slate-800 hover:bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 p-3 px-6 rounded-xl font-black transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest active:scale-95 active:bg-emerald-900/40">
                     {Icons.plus} Deposit
                 </button>
-                <button onClick={() => setIsWithdrawalModalOpen(true)} className="flex-1 sm:flex-none bg-slate-800 hover:bg-amber-900/30 text-amber-400 border border-amber-500/30 p-3 px-6 rounded-xl font-black transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest">
+                <button onClick={() => setIsWithdrawalModalOpen(true)} className="flex-1 sm:flex-none bg-slate-800 hover:bg-amber-900/30 text-amber-400 border border-amber-500/30 p-3 px-6 rounded-xl font-black transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest active:scale-95 active:bg-amber-900/40">
                     {Icons.minus} Withdraw
                 </button>
           </div>
@@ -571,18 +571,18 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
         <div className="bg-slate-800/50 p-5 sm:p-6 rounded-2xl border border-slate-700 shadow-2xl">
             <h3 className="text-xl font-bold text-white mb-5 flex items-center gap-2">Bulk Entry Terminal {Icons.clipboardList}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs font-bold uppercase tracking-wider">
+                <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs font-bold uppercase tracking-wider active:bg-slate-800 transition-colors">
                     <option value="">-- Choose Account --</option>
                     {Array.isArray(users) && users.filter(u => !u.isRestricted).map(u => <option key={u.id} value={u.id}>{u.name} ({u.id})</option>)}
                 </select>
-                <select value={selectedGameId} onChange={e => setSelectedGameId(e.target.value)} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs font-bold uppercase tracking-wider">
+                <select value={selectedGameId} onChange={e => setSelectedGameId(e.target.value)} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs font-bold uppercase tracking-wider active:bg-slate-800 transition-colors">
                     <option value="">-- Choose Market --</option>
                     {Array.isArray(games) && games.map(g => <OpenGameOption key={g.id} game={g} />)}
                 </select>
             </div>
             <textarea rows={8} value={bulkInput} onChange={e => setBulkInput(e.target.value)} placeholder="Entry Format Example:&#10;14, 25 50&#10;88, 91 100" className="w-full bg-slate-900 text-white p-4 rounded-xl border border-slate-700 font-mono text-xs focus:ring-1 focus:ring-emerald-500" />
             <div className="flex justify-end mt-4">
-                <button onClick={handleProcessBets} disabled={!selectedUserId || !selectedGameId || !bulkInput || isLoading} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-10 rounded-xl disabled:opacity-50 transition-all uppercase tracking-widest text-xs shadow-lg shadow-emerald-900/40">
+                <button onClick={handleProcessBets} disabled={!selectedUserId || !selectedGameId || !bulkInput || isLoading} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-10 rounded-xl disabled:opacity-50 transition-all uppercase tracking-widest text-xs shadow-lg shadow-emerald-900/40 active:scale-95 active:bg-emerald-700">
                     {isLoading ? 'PROCESSING...' : 'CONFIRM BULK ENTRIES'}
                 </button>
             </div>
@@ -607,8 +607,8 @@ const UserTransactionForm: React.FC<{ users: User[]; onTransaction: (userId: str
             </select>
             <input type="number" value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="Amount (PKR)" className={inputClass} min="0.01" required step="0.01" />
             <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-lg text-sm transition-all uppercase tracking-widest">Cancel</button>
-                <button type="submit" className={`flex-1 font-black py-2.5 rounded-lg text-white text-sm shadow-lg bg-${themeColor}-600 hover:bg-${themeColor}-500 transition-all uppercase tracking-widest`}>{type}</button>
+                <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-lg text-sm transition-all uppercase tracking-widest active:scale-95 active:bg-slate-800">Cancel</button>
+                <button type="submit" className={`flex-1 font-black py-2.5 rounded-lg text-white text-sm shadow-lg bg-${themeColor}-600 hover:bg-${themeColor}-500 transition-all uppercase tracking-widest active:scale-95 active:bg-${themeColor}-700`}>{type}</button>
             </div>
         </form>
     );
@@ -640,7 +640,7 @@ const BetHistoryView: React.FC<{ bets: Bet[], games: Game[], users: User[] }> = 
                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-900 text-white p-2 rounded-xl text-[10px] border border-slate-700 font-bold uppercase tracking-widest w-full" />
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-900 text-white p-2 rounded-xl text-[10px] border border-slate-700 font-bold uppercase tracking-widest w-full" />
                 <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Filter History..." className="bg-slate-900 text-white p-2 rounded-xl text-[10px] border border-slate-700 font-bold uppercase tracking-widest w-full" />
-                <button onClick={() => {setStartDate(''); setEndDate(''); setSearchTerm('');}} className="bg-slate-700 text-white p-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-600 transition-all w-full">Clear Filters</button>
+                <button onClick={() => {setStartDate(''); setEndDate(''); setSearchTerm('');}} className="bg-slate-700 text-white p-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-600 transition-all w-full active:scale-95 active:bg-slate-800">Clear Filters</button>
             </div>
 
             {/* Mobile Card View */}
@@ -674,7 +674,7 @@ const BetHistoryView: React.FC<{ bets: Bet[], games: Game[], users: User[] }> = 
                                 <th className="p-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">Player</th>
                                 <th className="p-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">Game</th>
                                 <th className="p-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">Details</th>
-                                <th className="p-4 text-[10px] text-slate-500 font-black uppercase tracking-widest text-right">Stake</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Stake</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">

@@ -188,24 +188,41 @@ module.exports = {
             return { success: true, newBalance };
         })();
     },
-    updateWallet: (id, table, amount, type, adminId = null) => {
+    updateWallet: (id, table, amount, type, callerId = null) => {
         return db.transaction(() => {
-            const acc = findAccountById(id, table, 0);
-            const newBalance = type === 'credit' ? acc.wallet + amount : acc.wallet - amount;
+            const recipient = findAccountById(id, table, 0);
+            const newBalance = type === 'credit' ? recipient.wallet + amount : recipient.wallet - amount;
             if (newBalance < 0) throw new Error("Insufficient funds");
             db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
             
-            const role = table.slice(0, -1).toUpperCase();
-            const desc = type === 'credit' ? `Deposit received from Admin` : `Withdrawal processed by Admin`;
-            addLedgerEntry(id, role, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
+            const recipientRole = table.slice(0, -1).toUpperCase();
+            const desc = type === 'credit' ? `Deposit received from ${callerId || 'Admin'}` : `Withdrawal processed by ${callerId || 'Admin'}`;
+            addLedgerEntry(id, recipientRole, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
 
-            if (adminId && table === 'dealers') {
-                const admin = findAccountById(adminId, 'admins', 0);
-                if (admin) {
-                    const adminNewBalance = type === 'credit' ? admin.wallet - amount : admin.wallet + amount;
-                    db.prepare(`UPDATE admins SET wallet = ? WHERE id = ?`).run(adminNewBalance, adminId);
-                    const adminDesc = type === 'credit' ? `Transfer to Dealer ${id}` : `Transfer from Dealer ${id}`;
-                    addLedgerEntry(adminId, 'ADMIN', adminDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, adminNewBalance);
+            // Handle the Source Account (Admin or Dealer)
+            if (callerId) {
+                let sourceTable = '';
+                let sourceRole = '';
+                
+                if (table === 'dealers') {
+                    sourceTable = 'admins';
+                    sourceRole = 'ADMIN';
+                } else if (table === 'users') {
+                    sourceTable = 'dealers';
+                    sourceRole = 'DEALER';
+                }
+
+                if (sourceTable) {
+                    const source = findAccountById(callerId, sourceTable, 0);
+                    if (source) {
+                        const sourceNewBalance = type === 'credit' ? source.wallet - amount : source.wallet + amount;
+                        // Source balance can be negative for Admin (System Funds), but not for Dealers
+                        if (sourceRole === 'DEALER' && sourceNewBalance < 0) throw new Error("Dealer has insufficient funds to top up user");
+                        
+                        db.prepare(`UPDATE ${sourceTable} SET wallet = ? WHERE id = ?`).run(sourceNewBalance, callerId);
+                        const sourceDesc = type === 'credit' ? `Transfer to ${id}` : `Transfer from ${id}`;
+                        addLedgerEntry(callerId, sourceRole, sourceDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, sourceNewBalance);
+                    }
                 }
             }
             return newBalance;
@@ -261,11 +278,11 @@ module.exports = {
         return { games: summaries, totals };
     },
     getNumberSummary: (gameId, date) => {
-        let query = "SELECT subGameType, numbers, amountPerNumber, totalAmount, gameId FROM bets WHERE 1=1";
+        let sql = "SELECT subGameType, numbers, amountPerNumber, totalAmount, gameId FROM bets WHERE 1=1";
         const params = [];
-        if (gameId) { query += " AND gameId = ?"; params.push(gameId); }
-        if (date) { query += " AND timestamp LIKE ?"; params.push(`${date}%`); }
-        const bets = db.prepare(query).all(...params);
+        if (gameId) { sql += " AND gameId = ?"; params.push(gameId); }
+        if (date) { sql += " AND timestamp LIKE ?"; params.push(`${date}%`); }
+        const bets = db.prepare(sql).all(...params);
         
         const map = { '2 Digit': {}, '1 Digit Open': {}, '1 Digit Close': {} };
         const gameStakeMap = {};
@@ -273,12 +290,24 @@ module.exports = {
         bets.forEach(b => {
             const nums = JSON.parse(b.numbers);
             gameStakeMap[b.gameId] = (gameStakeMap[b.gameId] || 0) + b.totalAmount;
-            nums.forEach(n => {
-                map[b.subGameType][n] = (map[b.subGameType][n] || 0) + b.amountPerNumber;
-            });
+            
+            let targetType = b.subGameType;
+            if (targetType === 'Bulk Game' || targetType === 'Combo Game') {
+                targetType = '2 Digit';
+            }
+
+            if (map[targetType]) {
+                nums.forEach(n => {
+                    const numStr = String(n);
+                    map[targetType][numStr] = (map[targetType][numStr] || 0) + b.amountPerNumber;
+                });
+            }
         });
 
-        const transform = (m) => Object.entries(m).map(([number, stake]) => ({ number, stake })).sort((a,b) => b.stake - a.stake);
+        const transform = (m) => Object.entries(m)
+            .map(([number, stake]) => ({ number, stake }))
+            .sort((a,b) => b.stake - a.stake);
+            
         const gameBreakdown = Object.entries(gameStakeMap).map(([gameId, stake]) => ({ gameId, stake }));
 
         return { 
