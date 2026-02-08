@@ -188,41 +188,24 @@ module.exports = {
             return { success: true, newBalance };
         })();
     },
-    updateWallet: (id, table, amount, type, callerId = null) => {
+    updateWallet: (id, table, amount, type, adminId = null) => {
         return db.transaction(() => {
-            const recipient = findAccountById(id, table, 0);
-            const newBalance = type === 'credit' ? recipient.wallet + amount : recipient.wallet - amount;
+            const acc = findAccountById(id, table, 0);
+            const newBalance = type === 'credit' ? acc.wallet + amount : acc.wallet - amount;
             if (newBalance < 0) throw new Error("Insufficient funds");
             db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
             
-            const recipientRole = table.slice(0, -1).toUpperCase();
-            const desc = type === 'credit' ? `Deposit received from ${callerId || 'Admin'}` : `Withdrawal processed by ${callerId || 'Admin'}`;
-            addLedgerEntry(id, recipientRole, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
+            const role = table.slice(0, -1).toUpperCase();
+            const desc = type === 'credit' ? `Deposit received from Admin` : `Withdrawal processed by Admin`;
+            addLedgerEntry(id, role, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
 
-            // Handle the Source Account (Admin or Dealer)
-            if (callerId) {
-                let sourceTable = '';
-                let sourceRole = '';
-                
-                if (table === 'dealers') {
-                    sourceTable = 'admins';
-                    sourceRole = 'ADMIN';
-                } else if (table === 'users') {
-                    sourceTable = 'dealers';
-                    sourceRole = 'DEALER';
-                }
-
-                if (sourceTable) {
-                    const source = findAccountById(callerId, sourceTable, 0);
-                    if (source) {
-                        const sourceNewBalance = type === 'credit' ? source.wallet - amount : source.wallet + amount;
-                        // Source balance can be negative for Admin (System Funds), but not for Dealers
-                        if (sourceRole === 'DEALER' && sourceNewBalance < 0) throw new Error("Dealer has insufficient funds to top up user");
-                        
-                        db.prepare(`UPDATE ${sourceTable} SET wallet = ? WHERE id = ?`).run(sourceNewBalance, callerId);
-                        const sourceDesc = type === 'credit' ? `Transfer to ${id}` : `Transfer from ${id}`;
-                        addLedgerEntry(callerId, sourceRole, sourceDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, sourceNewBalance);
-                    }
+            if (adminId && table === 'dealers') {
+                const admin = findAccountById(adminId, 'admins', 0);
+                if (admin) {
+                    const adminNewBalance = type === 'credit' ? admin.wallet - amount : admin.wallet + amount;
+                    db.prepare(`UPDATE admins SET wallet = ? WHERE id = ?`).run(adminNewBalance, adminId);
+                    const adminDesc = type === 'credit' ? `Transfer to Dealer ${id}` : `Transfer from Dealer ${id}`;
+                    addLedgerEntry(adminId, 'ADMIN', adminDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, adminNewBalance);
                 }
             }
             return newBalance;
@@ -291,6 +274,7 @@ module.exports = {
             const nums = JSON.parse(b.numbers);
             gameStakeMap[b.gameId] = (gameStakeMap[b.gameId] || 0) + b.totalAmount;
             
+            // Map special sub-game types to core digit types for summary
             let targetType = b.subGameType;
             if (targetType === 'Bulk Game' || targetType === 'Combo Game') {
                 targetType = '2 Digit';

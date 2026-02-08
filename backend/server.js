@@ -81,8 +81,8 @@ app.post('/api/dealer/users', authMiddleware, (req, res) => {
 app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => { database.deleteUser(req.params.id); res.json({ success: true }); });
 
 app.post('/api/user/bets', authMiddleware, (req, res) => res.json(database.placeBet(req.user.id, req.body.gameId, req.body.betGroups)));
-app.post('/api/dealer/topup/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit', req.user.id) }));
-app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit', req.user.id) }));
+app.post('/api/dealer/topup/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit') }));
+app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit') }));
 
 app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit', req.user.id) }));
 app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit', req.user.id) }));
