@@ -53,6 +53,11 @@ const connect = () => {
                     db.prepare('INSERT OR IGNORE INTO admins (id, name, password, wallet, prizeRates, avatarUrl) VALUES (?, ?, ?, ?, ?, ?)').run(
                         data.admin.id, data.admin.name, data.admin.password, data.admin.wallet, JSON.stringify(data.admin.prizeRates), data.admin.avatarUrl
                     );
+                    data.admin.ledger?.forEach(l => {
+                        db.prepare(`INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                            uuidv4(), data.admin.id, 'ADMIN', l.timestamp, l.description, l.debit, l.credit, l.balance
+                        );
+                    });
                 }
                 if (data.games) {
                     const insertGame = db.prepare('INSERT INTO games (id, name, drawTime) VALUES (?, ?, ?)');
@@ -142,6 +147,28 @@ module.exports = {
             return a;
         });
     },
+    searchBets: (query, gameId, userId) => {
+        let sql = "SELECT * FROM bets WHERE 1=1";
+        const params = [];
+        if (query) {
+            sql += " AND (numbers LIKE ? OR userId LIKE ?)";
+            params.push(`%"${query}"%`, `%${query}%`);
+        }
+        if (gameId) {
+            sql += " AND gameId = ?";
+            params.push(gameId);
+        }
+        if (userId) {
+            sql += " AND userId = ?";
+            params.push(userId);
+        }
+        sql += " ORDER BY timestamp DESC LIMIT 500";
+        return db.prepare(sql).all(...params).map(b => ({
+            ...b,
+            numbers: JSON.parse(b.numbers),
+            timestamp: new Date(b.timestamp)
+        }));
+    },
     placeBet: (userId, gameId, betGroups) => {
         return db.transaction(() => {
             const user = findAccountById(userId, 'users', 0);
@@ -161,13 +188,28 @@ module.exports = {
             return { success: true, newBalance };
         })();
     },
-    updateWallet: (id, table, amount, type) => {
+    updateWallet: (id, table, amount, type, adminId = null) => {
         return db.transaction(() => {
             const acc = findAccountById(id, table, 0);
             const newBalance = type === 'credit' ? acc.wallet + amount : acc.wallet - amount;
             if (newBalance < 0) throw new Error("Insufficient funds");
             db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
-            addLedgerEntry(id, table.slice(0, -1).toUpperCase(), type === 'credit' ? 'Wallet Top-up' : 'Withdrawal', type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
+            
+            const role = table.slice(0, -1).toUpperCase();
+            const desc = type === 'credit' ? `Deposit received from Admin` : `Withdrawal processed by Admin`;
+            addLedgerEntry(id, role, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
+
+            // If Admin is performing the action, update Admin wallet/ledger too
+            if (adminId && table === 'dealers') {
+                const admin = findAccountById(adminId, 'admins', 0);
+                if (admin) {
+                    const adminNewBalance = type === 'credit' ? admin.wallet - amount : admin.wallet + amount;
+                    // Note: Admins can usually go into negative or have huge pools, but let's just track it.
+                    db.prepare(`UPDATE admins SET wallet = ? WHERE id = ?`).run(adminNewBalance, adminId);
+                    const adminDesc = type === 'credit' ? `Transfer to Dealer ${id}` : `Transfer from Dealer ${id}`;
+                    addLedgerEntry(adminId, 'ADMIN', adminDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, adminNewBalance);
+                }
+            }
             return newBalance;
         })();
     },

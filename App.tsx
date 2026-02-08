@@ -14,38 +14,40 @@ const Header: React.FC = () => {
     if (!role || !account) return null;
 
     const roleColors: { [key in Role]: string } = {
-        [Role.Admin]: 'bg-red-500/20 text-red-300 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.5)]',
-        [Role.Dealer]: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.5)]',
-        [Role.User]: 'bg-sky-500/20 text-sky-300 border-sky-500/30 shadow-[0_0_10px_rgba(14,165,233,0.5)]',
+        [Role.Admin]: 'bg-red-500/20 text-red-300 border-red-500/30',
+        [Role.Dealer]: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        [Role.User]: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
     };
 
     return (
-        <header className="sticky top-0 z-40 bg-slate-900/50 backdrop-blur-lg border-b border-cyan-400/20">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
-                <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-lg border-b border-cyan-400/20 shadow-xl">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center h-16 sm:h-20">
+                <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
                     {account.avatarUrl ? (
-                        <img src={account.avatarUrl} alt={account.name} className="w-12 h-12 rounded-full object-cover border-2 border-cyan-400/50" />
+                        <img src={account.avatarUrl} alt={account.name} className="w-8 h-8 sm:w-11 sm:h-11 rounded-full object-cover border border-cyan-400/50" />
                     ) : (
-                        <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-cyan-400/50 flex items-center justify-center">
-                            <span className="font-bold text-xl text-cyan-300">{account.name ? account.name.charAt(0) : '?'}</span>
+                        <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-slate-800 border border-cyan-400/50 flex items-center justify-center shrink-0">
+                            <span className="font-bold text-sm sm:text-lg text-cyan-300">{account.name ? account.name.charAt(0) : '?'}</span>
                         </div>
                     )}
-                    <div>
-                        <h1 className="text-xl font-bold glitch-text hidden md:block" data-text="A-BABA EXCHANGE">A-BABA EXCHANGE</h1>
-                         <div className="flex items-center text-sm">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold mr-2 ${roleColors[role] || 'bg-slate-700'}`}>{role}</span>
-                            <span className="text-slate-300 font-semibold tracking-wider">{account.name || 'Account'}</span>
+                    <div className="flex flex-col min-w-0">
+                        <h1 className="text-xs sm:text-lg font-black tracking-tighter truncate hidden sm:block">A-BABA EXCHANGE</h1>
+                        <div className="flex items-center min-w-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-black mr-2 shrink-0 ${roleColors[role]}`}>{role}</span>
+                            <span className="text-slate-200 text-[10px] sm:text-sm font-bold truncate max-w-[80px] sm:max-w-none">{account.name}</span>
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                      { typeof account.wallet === 'number' && (
-                        <div className="hidden md:flex items-center bg-slate-800/50 px-4 py-2 rounded-md border border-slate-700 shadow-inner">
-                            {React.cloneElement(Icons.wallet, { className: "h-6 w-6 mr-3 text-cyan-400" })}
-                            <span className="font-semibold text-white text-lg tracking-wider">PKR {account.wallet.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <div className="flex items-center bg-slate-800/80 px-2 sm:px-4 py-1 sm:py-2 rounded-lg border border-slate-700 shadow-inner">
+                            <span className="text-emerald-400 mr-1 sm:mr-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-5 sm:w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" /><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" /></svg>
+                            </span>
+                            <span className="font-bold text-[10px] sm:text-base text-white font-mono">{account.wallet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
                         </div>
                     )}
-                    <button onClick={logout} className="bg-slate-700/50 border border-slate-600 hover:bg-red-500/30 hover:border-red-500/50 text-white font-bold py-2 px-4 rounded-md transition-all duration-300">Logout</button>
+                    <button onClick={logout} className="bg-slate-700/50 hover:bg-red-500/20 text-white text-[10px] sm:text-xs font-black uppercase tracking-widest py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg border border-slate-600 transition-all">Out</button>
                 </div>
             </div>
         </header>
@@ -122,7 +124,6 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         fetchPublicData();
-        // Public data (games results) doesn't change often, 20s is fine
         const interval = setInterval(fetchPublicData, 20000);
         return () => clearInterval(interval);
     }, [fetchPublicData]);
@@ -130,7 +131,6 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         if (role) {
             if (!hasInitialFetched) fetchPrivateData();
-            // User data (wallet) needs to be consistent, but 15s is better for CPU load
             const interval = setInterval(fetchPrivateData, 15000);
             return () => clearInterval(interval);
         } else {
@@ -170,13 +170,14 @@ const AppContent: React.FC = () => {
     if (loading) return <div className="min-h-screen flex items-center justify-center text-cyan-400 text-xl font-bold">Connecting...</div>;
 
     return (
-        <div className="min-h-screen flex flex-col">
+        <div className="min-h-screen flex flex-col relative overflow-hidden">
+            <div className="animated-bg"></div>
             {!role || !account ? (
                 <LandingPage games={games} />
             ) : (
                 <>
                     <Header />
-                    <main className="flex-grow">
+                    <main className="flex-grow pb-10">
                         {role === Role.User && <UserPanel user={account as User} games={games} bets={bets} placeBet={placeBet} />}
                         {role === Role.Dealer && (
                             <DealerPanel 
@@ -214,5 +215,5 @@ const AppContent: React.FC = () => {
     );
 };
 
-function App() { return (<div className="App bg-transparent text-slate-200 h-full"><AuthProvider><AppContent /></AuthProvider></div>); }
+function App() { return (<AuthProvider><AppContent /></AuthProvider>); }
 export default App;

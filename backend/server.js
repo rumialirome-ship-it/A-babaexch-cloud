@@ -9,6 +9,17 @@ const authMiddleware = require('./authMiddleware');
 const database = require('./database');
 
 const app = express();
+
+// Canonical WWW to Non-WWW Redirect
+app.use((req, res, next) => {
+    const host = req.headers.host;
+    if (host && host.startsWith('www.')) {
+        const newHost = host.replace(/^www\./, '');
+        return res.redirect(301, `${req.protocol}://${newHost}${req.originalUrl}`);
+    }
+    next();
+});
+
 app.use(compression());
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -40,6 +51,10 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
 // Admin Reports & Summaries
 app.get('/api/admin/summary', authMiddleware, (req, res) => res.json(database.getFinancialSummary()));
 app.get('/api/admin/number-summary', authMiddleware, (req, res) => res.json(database.getNumberSummary(req.query.gameId, req.query.date)));
+app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
+    res.json(database.searchBets(req.query.q, req.query.gameId, req.query.userId));
+});
 
 // Account Management
 app.post('/api/admin/dealers', authMiddleware, (req, res) => {
@@ -73,8 +88,8 @@ app.post('/api/user/bets', authMiddleware, (req, res) => res.json(database.place
 app.post('/api/dealer/topup/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit') }));
 app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit') }));
 
-app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit') }));
-app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit') }));
+app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit', req.user.id) }));
+app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit', req.user.id) }));
 
 app.put('/api/admin/accounts/:type/:id/toggle-restriction', authMiddleware, (req, res) => {
     database.toggleRestriction(req.params.id, req.params.type === 'user' ? 'users' : 'dealers');

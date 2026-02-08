@@ -1,3 +1,4 @@
+
 # 🎯 A-Baba Exchange — Setup & Deployment Guide
 
 ## 🔍 Where are my AI Studio files in the Shell?
@@ -28,23 +29,31 @@ chmod +x deploy.sh
 ---
 
 ## 🌐 Connecting to Your Domain: citylott.com
-To ensure your app runs perfectly on all devices (especially mobile), follow these domain steps:
+
+### ⚠️ IMPORTANT: Fixing www.citylott.com
+To make both `citylott.com` and `www.citylott.com` work, you must map **BOTH** in the Google Cloud Console.
+
+1.  **Google Cloud Console**:
+    *   Go to **Cloud Run** > Select your service.
+    *   Click **Manage Custom Domains**.
+    *   Add a mapping for `citylott.com`.
+    *   Add **another** mapping for `www.citylott.com`.
+
+2.  **DNS Provider (GoDaddy/Namecheap)**:
+    *   **For citylott.com**: Add the **A** and **AAAA** records provided by Google.
+    *   **For www.citylott.com**: Add a **CNAME** record:
+        *   **Host**: `www`
+        *   **Value**: `ghs.googlehosted.com.` (include the dot at the end).
 
 ### 1. Verification Checklist
-- **DNS Typo?**: Ensure you mapped the correct spelling (`citylott.com` vs `cittylott.com`). Check your domain registrar dashboard.
-- **Propagation**: DNS changes can take **24-48 hours** to work on all mobile networks. Some devices use cached DNS.
+- **DNS Typo?**: Ensure you mapped the correct spelling (`citylott.com`). Check your domain registrar dashboard.
+- **Propagation**: DNS changes can take **24-48 hours** to work on all mobile networks.
 - **SSL Status**: If a device shows "This connection is not private," Google is still generating your SSL certificate. Wait 1 hour.
 
 ### 2. Why is it not running on some devices?
-- **Private Mode**: Some older iPhones block "LocalStorage" in Private/Incognito mode. We have added a fix, but for best results, use a normal browser tab.
+- **Private Mode**: Some older iPhones block "LocalStorage" in Private/Incognito mode.
 - **Old iOS**: Ensure the device is running at least iOS 12.0+.
-- **Carrier Blocking**: Some mobile networks (especially in restricted regions) might block Google Cloud IPs. Try switching from Mobile Data to Wi-Fi to test.
-
-### 3. DNS Records for citylott.com
-Ensure your Registrar (GoDaddy/Namecheap) has these records from the Cloud Run "Custom Domains" tab:
-1. **A Records**: Point `@` to the 4 Google IPs provided.
-2. **AAAA Records**: Point `@` to the 4 IPv6 addresses provided (Critical for mobile devices).
-3. **CNAME**: Point `www` to `citylott.com`.
+- **Carrier Blocking**: Some mobile networks might block Google Cloud IPs. Try switching from Mobile Data to Wi-Fi to test.
 
 ---
 
