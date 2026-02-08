@@ -61,7 +61,7 @@ const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                    {Array.isArray(entries) && [...entries].reverse().map(entry => (
+                    {Array.isArray(entries) && [...entries].sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()).map(entry => (
                         <tr key={entry.id} className="hover:bg-cyan-500/10 text-sm transition-colors">
                             <td className="p-3 text-slate-400 whitespace-nowrap">{entry.timestamp?.toLocaleString() || 'N/A'}</td>
                             <td className="p-3 text-white">{entry.description}</td>
@@ -120,9 +120,9 @@ const DealerForm: React.FC<{
                 }
             };
             await onSave(payload, dealer?.id);
-            onCancel(); // Close form on success
+            onCancel(); // Closes the modal on success
         } catch (err) {
-            alert("Failed to save dealer.");
+            alert("Error: Dealer ID might already exist or system error.");
         } finally {
             setIsLoading(false);
         }
@@ -150,17 +150,17 @@ const DealerForm: React.FC<{
             </div>
             
             <div className="grid grid-cols-3 gap-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                <div className="col-span-3 text-[10px] font-black text-red-500 uppercase">Prize Multipliers</div>
+                <div className="col-span-3 text-[10px] font-black text-red-500 uppercase">Prize Rates</div>
                 <div>
-                    <label className={labelClass}>2-Digit</label>
+                    <label className={labelClass}>2-Digit (x)</label>
                     <input type="number" value={formData.prizeRates.twoDigit} onChange={e => setFormData({...formData, prizeRates: {...formData.prizeRates, twoDigit: e.target.value}})} className={inputClass} />
                 </div>
                 <div>
-                    <label className={labelClass}>1-Open</label>
+                    <label className={labelClass}>1-Open (x)</label>
                     <input type="number" value={formData.prizeRates.oneDigitOpen} onChange={e => setFormData({...formData, prizeRates: {...formData.prizeRates, oneDigitOpen: e.target.value}})} className={inputClass} />
                 </div>
                 <div>
-                    <label className={labelClass}>1-Close</label>
+                    <label className={labelClass}>1-Close (x)</label>
                     <input type="number" value={formData.prizeRates.oneDigitClose} onChange={e => setFormData({...formData, prizeRates: {...formData.prizeRates, oneDigitClose: e.target.value}})} className={inputClass} />
                 </div>
             </div>
@@ -249,7 +249,10 @@ const BetSearchView: React.FC<{ games: Game[]; users: User[]; fetchWithAuth: any
             if (selectedUser) params.append('userId', selectedUser);
             
             const res = await fetchWithAuth(`/api/admin/bets/search?${params.toString()}`);
-            if (res.ok) setResults(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setResults(data.map((b: any) => ({ ...b, timestamp: new Date(b.timestamp) })));
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -268,18 +271,18 @@ const BetSearchView: React.FC<{ games: Game[]; users: User[]; fetchWithAuth: any
         <div className="space-y-6">
             <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Quick Search (Number or ID)</label>
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Search Numbers or Account ID</label>
                     <input type="text" placeholder="e.g. 43 or user01" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={inputClass} />
                 </div>
                 <div>
-                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Game Filter</label>
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Market Filter</label>
                     <select value={selectedGame} onChange={e => setSelectedGame(e.target.value)} className={inputClass}>
-                        <option value="">All Games</option>
+                        <option value="">All Markets</option>
                         {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                 </div>
                 <div>
-                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">User Filter</label>
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">User Account</label>
                     <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)} className={inputClass}>
                         <option value="">All Users</option>
                         {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.id})</option>)}
@@ -287,21 +290,21 @@ const BetSearchView: React.FC<{ games: Game[]; users: User[]; fetchWithAuth: any
                 </div>
             </div>
 
-            <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700">
+            <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[800px]">
                         <thead className="bg-slate-800/80 border-b border-slate-700">
                             <tr>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Time</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">User</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Game</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Player</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Numbers</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Stake</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={5} className="p-10 text-center animate-pulse text-slate-500 uppercase tracking-widest text-xs">Searching database...</td></tr>
+                                <tr><td colSpan={5} className="p-10 text-center animate-pulse text-slate-500 uppercase tracking-widest text-xs">Querying system database...</td></tr>
                             ) : results.length === 0 ? (
                                 <tr><td colSpan={5} className="p-10 text-center text-slate-500 font-black uppercase tracking-widest text-xs">No matching bets found</td></tr>
                             ) : results.map(bet => {
@@ -309,7 +312,7 @@ const BetSearchView: React.FC<{ games: Game[]; users: User[]; fetchWithAuth: any
                                 const game = games.find(g => g.id === bet.gameId);
                                 return (
                                     <tr key={bet.id} className="hover:bg-slate-700/20 transition-all">
-                                        <td className="p-4 text-[10px] text-slate-400 font-mono">{new Date(bet.timestamp).toLocaleString()}</td>
+                                        <td className="p-4 text-[10px] text-slate-400 font-mono">{bet.timestamp.toLocaleString()}</td>
                                         <td className="p-4">
                                             <div className="text-white font-bold text-xs">{user?.name || '---'}</div>
                                             <div className="text-[9px] text-slate-500 uppercase font-mono">{bet.userId}</div>
@@ -352,18 +355,18 @@ const DealerTransactionForm: React.FC<{
         <form onSubmit={async (e) => { e.preventDefault(); if (selectedId && amount && amount > 0) { await onTransaction(selectedId, Number(amount)); } }} className="space-y-4">
             {!fixedDealerId && (
                 <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className={inputClass} required>
-                    <option value="">-- Choose Dealer Account --</option>
+                    <option value="">-- Select Dealer Account --</option>
                     {dealers.map(d => (
                         <option key={d.id} value={d.id}>
-                            {d.name} ({d.id}) — Pool: PKR {d.wallet.toLocaleString()}
+                            {d.name} ({d.id}) — Balance: PKR {d.wallet.toLocaleString()}
                         </option>
                     ))}
                 </select>
             )}
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder={`Enter Amount to ${type} (PKR)`} className={inputClass} min="0.01" required step="0.01" autoFocus />
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder={`Enter PKR amount to ${type}`} className={inputClass} min="0.01" required step="0.01" autoFocus />
             <div className="flex gap-3 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-widest">Cancel</button>
-                <button type="submit" className={`flex-1 font-black py-3 rounded-xl text-white text-xs shadow-lg bg-${themeColor}-600 hover:bg-${themeColor}-500 transition-all uppercase tracking-widest`}>Confirm {type}</button>
+                <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-widest transition-all">Cancel</button>
+                <button type="submit" className={`flex-1 font-black py-3 rounded-xl text-white text-xs shadow-lg bg-${themeColor}-600 hover:bg-${themeColor}-500 transition-all uppercase tracking-widest`}>Process {type}</button>
             </div>
         </form>
     );
@@ -434,7 +437,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl sm:text-4xl font-black text-red-500 uppercase tracking-tighter">Admin Console</h2>
+        <h2 className="text-2xl sm:text-4xl font-black text-red-500 uppercase tracking-tighter">System Administration</h2>
         <div className="bg-slate-800/80 p-1 rounded-xl flex items-center space-x-1 border border-slate-700 w-full sm:w-auto overflow-x-auto no-scrollbar">
             {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`shrink-0 flex items-center space-x-2 py-2 px-4 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === tab.id ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
@@ -451,17 +454,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="animate-fade-in space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Dealer Network</h3>
-            <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest transition-all">Add New Dealer</button>
+            <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all">Add New Dealer</button>
           </div>
-          <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700">
+          <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm">
              <div className="overflow-x-auto">
                  <table className="w-full text-left min-w-[900px]">
                      <thead className="bg-slate-800/80 border-b border-slate-700">
                          <tr className="text-[10px] text-slate-500 uppercase font-black tracking-widest">
-                             <th className="p-4">Entity</th>
+                             <th className="p-4">Entity Details</th>
                              <th className="p-4 text-right">Pool Balance</th>
                              <th className="p-4 text-center">Status</th>
-                             <th className="p-4 text-right">Fund Management</th>
+                             <th className="p-4 text-center">Fund Controls</th>
                              <th className="p-4 text-right">Actions</th>
                          </tr>
                      </thead>
@@ -470,26 +473,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                              <tr key={dealer.id} className="hover:bg-slate-700/20 transition-all">
                                  <td className="p-4">
                                      <div className="text-white font-black text-sm">{dealer.name}</div>
-                                     <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{dealer.id}</div>
-                                 </td>
-                                 <td className="p-4 text-right font-mono text-emerald-400 font-bold">Rs {(dealer.wallet || 0).toLocaleString()}</td>
-                                 <td className="p-4 text-center">
-                                     <button onClick={() => toggleAccountRestriction(dealer.id, 'dealer')} className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${dealer.isRestricted ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
-                                         {dealer.isRestricted ? 'Locked' : 'Live'}
-                                     </button>
+                                     <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{dealer.id} | {dealer.area}</div>
                                  </td>
                                  <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => { setActionDealerId(dealer.id); setIsWithdrawModalOpen(true); }} className="text-[9px] font-black text-amber-500 border border-amber-500/30 px-2 py-1 rounded hover:bg-amber-500/10 uppercase tracking-widest transition-all">Withdraw</button>
-                                        <button onClick={() => { setActionDealerId(dealer.id); setIsDepositModalOpen(true); }} className="text-[9px] font-black text-emerald-500 border border-emerald-500/30 px-2 py-1 rounded hover:bg-emerald-500/10 uppercase tracking-widest transition-all">Deposit</button>
+                                    <div className="font-mono text-emerald-400 font-bold text-sm">Rs {(dealer.wallet || 0).toLocaleString()}</div>
+                                 </td>
+                                 <td className="p-4 text-center">
+                                     <button onClick={() => toggleAccountRestriction(dealer.id, 'dealer')} className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${dealer.isRestricted ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
+                                         {dealer.isRestricted ? 'Restricted' : 'Operational'}
+                                     </button>
+                                 </td>
+                                 <td className="p-4">
+                                    <div className="flex justify-center gap-2">
+                                        <button onClick={() => { setActionDealerId(dealer.id); setIsWithdrawModalOpen(true); }} className="bg-amber-600/10 text-amber-500 border border-amber-500/30 px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest hover:bg-amber-600/20 transition-all">Withdraw</button>
+                                        <button onClick={() => { setActionDealerId(dealer.id); setIsDepositModalOpen(true); }} className="bg-emerald-600/10 text-emerald-500 border border-emerald-500/30 px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600/20 transition-all">Deposit</button>
                                     </div>
                                  </td>
                                  <td className="p-4 text-right flex justify-end gap-3">
                                     <button onClick={() => { setViewingLedgerId(dealer.id); setViewingLedgerType('dealer'); }} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline">Ledger</button>
-                                    <button onClick={() => { setSelectedDealer(dealer); setIsDealerModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white">Edit</button>
+                                    <button onClick={() => { setSelectedDealer(dealer); setIsDealerModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white transition-all">Edit</button>
                                  </td>
                              </tr>
                          ))}
+                         {dealers.length === 0 && (
+                             <tr><td colSpan={5} className="p-12 text-center text-slate-500 font-black uppercase text-xs tracking-widest">No Dealers Registered</td></tr>
+                         )}
                      </tbody>
                  </table>
              </div>
@@ -498,28 +506,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* Account Management Modal */}
-      <Modal isOpen={isDealerModalOpen} onClose={() => { setIsDealerModalOpen(false); setSelectedDealer(undefined); }} title={selectedDealer ? "Edit Dealer Profile" : "Register New Dealer"} themeColor="red">
+      <Modal isOpen={isDealerModalOpen} onClose={() => { setIsDealerModalOpen(false); setSelectedDealer(undefined); }} title={selectedDealer ? "Modify Dealer Access" : "Register New Dealer Entity"} themeColor="red">
           <DealerForm dealer={selectedDealer} onSave={onSaveDealer} onCancel={() => { setIsDealerModalOpen(false); setSelectedDealer(undefined); }} />
       </Modal>
 
       {/* Transaction Modals */}
-      <Modal isOpen={isDepositModalOpen} onClose={() => { setIsDepositModalOpen(false); setActionDealerId(undefined); }} title="Deposit Funds to Dealer" themeColor="emerald">
+      <Modal isOpen={isDepositModalOpen} onClose={() => { setIsDepositModalOpen(false); setActionDealerId(undefined); }} title="Internal Deposit (Admin -> Dealer)" themeColor="emerald">
           <DealerTransactionForm type="Top-Up" dealers={dealers} fixedDealerId={actionDealerId} onCancel={() => setIsDepositModalOpen(false)} onTransaction={async (id, amt) => { await topUpDealerWallet(id, amt); setIsDepositModalOpen(false); }} />
       </Modal>
 
-      <Modal isOpen={isWithdrawModalOpen} onClose={() => { setIsWithdrawModalOpen(false); setActionDealerId(undefined); }} title="Withdraw Funds from Dealer" themeColor="amber">
+      <Modal isOpen={isWithdrawModalOpen} onClose={() => { setIsWithdrawModalOpen(false); setActionDealerId(undefined); }} title="Internal Withdrawal (Dealer -> Admin)" themeColor="amber">
           <DealerTransactionForm type="Withdrawal" dealers={dealers} fixedDealerId={actionDealerId} onCancel={() => setIsWithdrawModalOpen(false)} onTransaction={async (id, amt) => { await withdrawFromDealerWallet(id, amt); setIsWithdrawModalOpen(false); }} />
       </Modal>
 
       {/* Ledger Modal */}
       {activeLedgerAccount && (
-        <Modal isOpen={!!activeLedgerAccount} onClose={() => { setViewingLedgerId(null); setViewingLedgerType(null); }} title={`Financial Ledger: ${activeLedgerAccount.name}`} size="xl">
+        <Modal isOpen={!!activeLedgerAccount} onClose={() => { setViewingLedgerId(null); setViewingLedgerType(null); }} title={`Financial Audit Ledger: ${activeLedgerAccount.name}`} size="xl">
             <LedgerTable entries={activeLedgerAccount.ledger} />
         </Modal>
       )}
 
       <div className="p-12 text-center text-slate-700 font-black uppercase text-[10px] tracking-widest italic opacity-30">
-        System Operational • Secure Admin Link Established
+        Enterprise Cloud Node • Secure Admin Handshake Verified
       </div>
     </div>
   );
