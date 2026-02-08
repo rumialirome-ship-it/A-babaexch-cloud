@@ -27,6 +27,20 @@ interface FinancialSummary {
   totalBets: number;
 }
 
+interface NumberStake {
+    number: string;
+    stake: number;
+}
+
+interface NumberSummaryData {
+    twoDigit: NumberStake[];
+    oneDigitOpen: NumberStake[];
+    oneDigitClose: NumberStake[];
+    gameBreakdown: { gameId: string; stake: number }[];
+}
+
+const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
 // --- SHARED COMPONENTS ---
 
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'md' | 'lg' | 'xl'; themeColor?: string }> = ({ isOpen, onClose, title, children, size = 'md', themeColor = 'cyan' }) => {
@@ -278,11 +292,107 @@ const DashboardView: React.FC<{ summary: FinancialSummary | null; admin: Admin; 
     );
 };
 
+const NumberSummaryView: React.FC<{ games: Game[]; fetchWithAuth: any }> = ({ games, fetchWithAuth }) => {
+    const [data, setData] = useState<NumberSummaryData | null>(null);
+    const [gameId, setGameId] = useState('');
+    const [date, setDate] = useState(getTodayDateString());
+    const [loading, setLoading] = useState(false);
+
+    const loadSummary = async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (gameId) params.append('gameId', gameId);
+            if (date) params.append('date', date);
+            const res = await fetchWithAuth(`/api/admin/number-summary?${params.toString()}`);
+            if (res.ok) {
+                setData(await res.json());
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadSummary();
+    }, [gameId, date]);
+
+    const copyNumbers = (stakes: NumberStake[]) => {
+        const list = stakes.map(s => s.number).join(', ');
+        navigator.clipboard.writeText(list).then(() => alert('Numbers copied to clipboard!'));
+    };
+
+    const inputClass = "bg-slate-800 p-2 rounded-xl border border-slate-700 text-white text-xs font-bold focus:ring-1 focus:ring-red-500 transition-all w-full";
+
+    const SummaryTable = ({ title, stakes }: { title: string; stakes: NumberStake[] }) => (
+        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col h-full shadow-2xl">
+            <div className="p-4 border-b border-slate-700 bg-slate-800/80 flex justify-between items-center">
+                <h4 className="text-xs font-black text-white uppercase tracking-widest">{title}</h4>
+                <button 
+                    onClick={() => copyNumbers(stakes)}
+                    className="text-[9px] font-black text-cyan-400 uppercase tracking-tighter hover:text-white transition-colors flex items-center gap-1 bg-cyan-500/10 px-2 py-1 rounded"
+                >
+                    {Icons.clipboardList} Copy List
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto max-h-[500px] no-scrollbar">
+                <table className="w-full text-left">
+                    <thead className="sticky top-0 bg-slate-900 text-[9px] text-slate-500 uppercase font-black">
+                        <tr>
+                            <th className="p-3">Num</th>
+                            <th className="p-3 text-right">Total Stake</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                        {stakes.length === 0 ? (
+                            <tr><td colSpan={2} className="p-10 text-center text-slate-600 text-[10px] uppercase font-black">No Active Bids</td></tr>
+                        ) : stakes.map(s => (
+                            <tr key={s.number} className="hover:bg-slate-700/20 group">
+                                <td className="p-3 font-mono text-sm text-cyan-400 font-bold group-hover:scale-110 transition-transform origin-left">{s.number}</td>
+                                <td className="p-3 text-right font-mono text-sm text-white">Rs {s.stake.toLocaleString()}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 bg-slate-800/40 p-4 rounded-2xl border border-slate-700">
+                <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Draw Date</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} />
+                </div>
+                <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 block">Market Selection</label>
+                    <select value={gameId} onChange={e => setGameId(e.target.value)} className={inputClass}>
+                        <option value="">Consolidated (All Markets)</option>
+                        {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase tracking-[0.3em] text-xs">Accessing Stake Data...</div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <SummaryTable title="2-Digit Stakes" stakes={data?.twoDigit || []} />
+                    <SummaryTable title="1-Digit Open Stakes" stakes={data?.oneDigitOpen || []} />
+                    <SummaryTable title="1-Digit Close Stakes" stakes={data?.oneDigitClose || []} />
+                </div>
+            )}
+        </div>
+    );
+};
+
 const LiveBetsView: React.FC<{ games: Game[]; bets: Bet[]; users: User[] }> = ({ games, bets, users }) => {
     const liveGames = useMemo(() => games.filter(g => g.isMarketOpen), [games]);
     
     const recentBets = useMemo(() => {
-        // Show last 50 bets overall, but highlight active ones
         return [...bets].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50);
     }, [bets]);
 
@@ -568,6 +678,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingLedgerId, setViewingLedgerId] = useState<string | null>(null);
   const [viewingLedgerType, setViewingLedgerType] = useState<'dealer' | 'admin' | null>(null);
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
+  const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -578,6 +689,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Stats', icon: Icons.chartBar },
     { id: 'live', label: 'Live', icon: <span className="animate-pulse flex items-center justify-center bg-red-500 w-2 h-2 rounded-full mr-2"></span> },
+    { id: 'stakes', label: 'Stakes', icon: Icons.clipboardList },
     { id: 'dealers', label: 'Dealers', icon: Icons.userGroup }, 
     { id: 'users', label: 'Users', icon: Icons.user },
     { id: 'search', label: 'Bet Search', icon: Icons.search },
@@ -607,6 +719,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       
       {activeTab === 'dashboard' && <DashboardView summary={summaryData} admin={admin} onOpenAdminLedger={() => { setViewingLedgerId(admin.id); setViewingLedgerType('admin'); }} />}
       {activeTab === 'live' && <LiveBetsView games={games} bets={bets} users={users} />}
+      {activeTab === 'stakes' && <NumberSummaryView fetchWithAuth={fetchWithAuth} games={games} />}
       {activeTab === 'search' && <BetSearchView fetchWithAuth={fetchWithAuth} games={games} users={users} />}
 
       {activeTab === 'dealers' && (
@@ -717,67 +830,100 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="animate-fade-in space-y-6">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Market Control Center</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {games.map(game => (
-                    <div key={game.id} className="bg-slate-800/60 p-5 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between space-y-4">
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 text-cyan-400 font-black">{game.name.substring(0,2)}</div>
-                                <div>
-                                    <h4 className="text-white font-black uppercase text-base">{game.name}</h4>
-                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Draw: {game.drawTime}</p>
+                {games.map(game => {
+                    const isEditing = editingWinnerMap[game.id];
+                    const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
+                    
+                    return (
+                        <div key={game.id} className="bg-slate-800/60 p-5 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between space-y-4">
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 text-cyan-400 font-black">{game.name.substring(0,2)}</div>
+                                    <div>
+                                        <h4 className="text-white font-black uppercase text-base">{game.name}</h4>
+                                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Draw: {game.drawTime}</p>
+                                    </div>
+                                </div>
+                                <div className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${game.isMarketOpen ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                                    {game.isMarketOpen ? 'Bidding Open' : 'Closed'}
                                 </div>
                             </div>
-                            <div className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${game.isMarketOpen ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-                                {game.isMarketOpen ? 'Bidding Open' : 'Closed'}
-                            </div>
-                        </div>
 
-                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center">
-                            <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Winning Result</label>
-                            {game.winningNumber && !game.winningNumber.endsWith('_') ? (
-                                <div className="text-4xl font-black text-white font-mono drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">{game.winningNumber}</div>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    <input 
-                                        type="text" 
-                                        maxLength={2}
-                                        placeholder="--"
-                                        value={winnerInputMap[game.id] || ''}
-                                        onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})}
-                                        className="bg-slate-800 border border-slate-600 rounded-lg w-16 p-2 text-center text-xl font-mono text-white focus:ring-1 focus:ring-cyan-500"
-                                    />
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center group">
+                                <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Winning Result</label>
+                                
+                                {winningNumber && !isEditing ? (
+                                    <div className="relative group cursor-pointer" onClick={() => {
+                                        setEditingWinnerMap({ ...editingWinnerMap, [game.id]: true });
+                                        setWinnerInputMap({ ...winnerInputMap, [game.id]: winningNumber });
+                                    }}>
+                                        <div className="text-4xl font-black text-white font-mono drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">
+                                            {winningNumber}
+                                        </div>
+                                        <div className="absolute -top-1 -right-6 opacity-0 group-hover:opacity-100 transition-opacity text-cyan-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-3 w-full">
+                                        <div className="flex items-center gap-2">
+                                            <input 
+                                                type="text" 
+                                                maxLength={2}
+                                                placeholder="--"
+                                                autoFocus
+                                                value={winnerInputMap[game.id] || ''}
+                                                onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})}
+                                                className="bg-slate-800 border border-slate-600 rounded-lg w-20 p-2 text-center text-2xl font-mono text-white focus:ring-1 focus:ring-cyan-500 shadow-inner"
+                                            />
+                                            <button 
+                                                onClick={async () => {
+                                                    const val = winnerInputMap[game.id];
+                                                    if (val) {
+                                                        if (winningNumber) {
+                                                            await updateWinner?.(game.id, val);
+                                                        } else {
+                                                            await declareWinner?.(game.id, val);
+                                                        }
+                                                        setWinnerInputMap({...winnerInputMap, [game.id]: ''});
+                                                        setEditingWinnerMap({ ...editingWinnerMap, [game.id]: false });
+                                                    }
+                                                }}
+                                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-lg"
+                                            >
+                                                {winningNumber ? 'Update' : 'Declare'}
+                                            </button>
+                                        </div>
+                                        {isEditing && (
+                                            <button 
+                                                onClick={() => setEditingWinnerMap({ ...editingWinnerMap, [game.id]: false })}
+                                                className="text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-widest underline"
+                                            >
+                                                Cancel Edit
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2">
+                                {game.winningNumber && !game.payoutsApproved && (
                                     <button 
-                                        onClick={async () => {
-                                            if (winnerInputMap[game.id]) {
-                                                await declareWinner?.(game.id, winnerInputMap[game.id]);
-                                                setWinnerInputMap({...winnerInputMap, [game.id]: ''});
-                                            }
-                                        }}
-                                        className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                                    >Declare</button>
-                                </div>
-                            )}
+                                        onClick={() => approvePayouts?.(game.id)}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20"
+                                    >Authorize Payouts</button>
+                                )}
+                                {!game.winningNumber && (
+                                    <div className="flex-1 text-center py-3 text-[9px] text-slate-600 font-bold uppercase tracking-widest border border-dashed border-slate-700 rounded-xl">
+                                        Awaiting System Input
+                                    </div>
+                                )}
+                            </div>
                         </div>
-
-                        <div className="flex gap-2">
-                            {game.winningNumber && !game.payoutsApproved && (
-                                <button 
-                                    onClick={() => approvePayouts?.(game.id)}
-                                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20"
-                                >Authorize Payouts</button>
-                            )}
-                            {game.winningNumber && (
-                                <button 
-                                    onClick={() => {
-                                        const newNum = prompt("Enter new winning number:", game.winningNumber);
-                                        if (newNum) updateWinner?.(game.id, newNum);
-                                    }}
-                                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
-                                >Override Result</button>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
       )}

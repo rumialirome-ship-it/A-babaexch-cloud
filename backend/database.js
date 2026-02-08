@@ -199,12 +199,10 @@ module.exports = {
             const desc = type === 'credit' ? `Deposit received from Admin` : `Withdrawal processed by Admin`;
             addLedgerEntry(id, role, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
 
-            // If Admin is performing the action, update Admin wallet/ledger too
             if (adminId && table === 'dealers') {
                 const admin = findAccountById(adminId, 'admins', 0);
                 if (admin) {
                     const adminNewBalance = type === 'credit' ? admin.wallet - amount : admin.wallet + amount;
-                    // Note: Admins can usually go into negative or have huge pools, but let's just track it.
                     db.prepare(`UPDATE admins SET wallet = ? WHERE id = ?`).run(adminNewBalance, adminId);
                     const adminDesc = type === 'credit' ? `Transfer to Dealer ${id}` : `Transfer from Dealer ${id}`;
                     addLedgerEntry(adminId, 'ADMIN', adminDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, adminNewBalance);
@@ -310,7 +308,36 @@ module.exports = {
         );
     },
     declareWinner: (gameId, num) => db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(num, gameId),
-    approvePayouts: (gameId) => db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId),
+    approvePayouts: (gameId) => {
+        return db.transaction(() => {
+            const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
+            if (!game || !game.winningNumber || game.payoutsApproved) {
+                return { success: false, message: "Invalid game state" };
+            }
+
+            const winningNumber = game.winningNumber;
+            const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId);
+
+            bets.forEach(bet => {
+                const user = db.prepare('SELECT * FROM users WHERE id = ?').get(bet.userId);
+                if (!user) return;
+
+                const payout = calculatePayout(bet, winningNumber, game.name, user.prizeRates);
+                if (payout > 0) {
+                    const newBalance = user.wallet + payout;
+                    db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, user.id);
+                    
+                    const desc = `WIN: ${game.name} (${winningNumber}) - ${bet.subGameType} Ticket`;
+                    db.prepare(`INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                        uuidv4(), user.id, 'USER', new Date().toISOString(), desc, 0, payout, newBalance
+                    );
+                }
+            });
+
+            db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
+            return { success: true };
+        })();
+    },
     toggleRestriction: (id, table) => {
         const acc = db.prepare(`SELECT isRestricted FROM ${table} WHERE id = ?`).get(id);
         db.prepare(`UPDATE ${table} SET isRestricted = ? WHERE id = ?`).run(acc.isRestricted ? 0 : 1, id)

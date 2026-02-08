@@ -10,7 +10,6 @@ const database = require('./database');
 
 const app = express();
 
-// Canonical WWW to Non-WWW Redirect
 app.use((req, res, next) => {
     const host = req.headers.host;
     if (host && host.startsWith('www.')) {
@@ -48,7 +47,6 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
     res.json({ account, role, ...extra });
 });
 
-// Admin Reports & Summaries
 app.get('/api/admin/summary', authMiddleware, (req, res) => res.json(database.getFinancialSummary()));
 app.get('/api/admin/number-summary', authMiddleware, (req, res) => res.json(database.getNumberSummary(req.query.gameId, req.query.date)));
 app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
@@ -56,7 +54,6 @@ app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
     res.json(database.searchBets(req.query.q, req.query.gameId, req.query.userId));
 });
 
-// Account Management
 app.post('/api/admin/dealers', authMiddleware, (req, res) => {
     const d = req.body;
     require('better-sqlite3')(path.join(__dirname, 'database.sqlite')).prepare('INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
@@ -83,7 +80,6 @@ app.post('/api/dealer/users', authMiddleware, (req, res) => {
 
 app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => { database.deleteUser(req.params.id); res.json({ success: true }); });
 
-// Wallet & Bets
 app.post('/api/user/bets', authMiddleware, (req, res) => res.json(database.placeBet(req.user.id, req.body.gameId, req.body.betGroups)));
 app.post('/api/dealer/topup/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit') }));
 app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit') }));
@@ -96,9 +92,11 @@ app.put('/api/admin/accounts/:type/:id/toggle-restriction', authMiddleware, (req
     res.json({ success: true });
 });
 
-// Winner Declaration
 app.post('/api/admin/games/:id/declare-winner', authMiddleware, (req, res) => { database.declareWinner(req.params.id, req.body.winningNumber); res.json({ success: true }); });
-app.post('/api/admin/games/:id/approve-payouts', authMiddleware, (req, res) => { database.approvePayouts(req.params.id); res.json({ success: true }); });
+app.post('/api/admin/games/:id/approve-payouts', authMiddleware, (req, res) => { 
+    const result = database.approvePayouts(req.params.id); 
+    res.json(result); 
+});
 
 app.get('/api/games', (req, res) => res.json(database.getAllFromTable('games')));
 
