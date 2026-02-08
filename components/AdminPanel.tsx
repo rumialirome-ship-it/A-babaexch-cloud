@@ -120,9 +120,9 @@ const DealerForm: React.FC<{
                 }
             };
             await onSave(payload, dealer?.id);
-            onCancel(); // Closes the modal on success
+            onCancel(); 
         } catch (err) {
-            alert("Error: Dealer ID might already exist or system error.");
+            alert("Error saving dealer info.");
         } finally {
             setIsLoading(false);
         }
@@ -411,6 +411,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [actionDealerId, setActionDealerId] = useState<string | undefined>(undefined);
   const [viewingLedgerId, setViewingLedgerId] = useState<string | null>(null);
   const [viewingLedgerType, setViewingLedgerType] = useState<'dealer' | 'admin' | null>(null);
+  const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -454,7 +455,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="animate-fade-in space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Dealer Network</h3>
-            <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all">Add New Dealer</button>
+            <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest transition-all">Add New Dealer</button>
           </div>
           <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm">
              <div className="overflow-x-auto">
@@ -473,7 +474,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                              <tr key={dealer.id} className="hover:bg-slate-700/20 transition-all">
                                  <td className="p-4">
                                      <div className="text-white font-black text-sm">{dealer.name}</div>
-                                     <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{dealer.id} | {dealer.area}</div>
+                                     <div className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{dealer.id}</div>
                                  </td>
                                  <td className="p-4 text-right">
                                     <div className="font-mono text-emerald-400 font-bold text-sm">Rs {(dealer.wallet || 0).toLocaleString()}</div>
@@ -495,14 +496,138 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  </td>
                              </tr>
                          ))}
-                         {dealers.length === 0 && (
-                             <tr><td colSpan={5} className="p-12 text-center text-slate-500 font-black uppercase text-xs tracking-widest">No Dealers Registered</td></tr>
-                         )}
                      </tbody>
                  </table>
              </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'users' && (
+        <div className="animate-fade-in space-y-4">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest">Master User List</h3>
+            <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[900px]">
+                        <thead className="bg-slate-800/80 border-b border-slate-700">
+                            <tr className="text-[10px] text-slate-500 uppercase font-black tracking-widest">
+                                <th className="p-4">User</th>
+                                <th className="p-4">Parent Dealer</th>
+                                <th className="p-4 text-right">Balance</th>
+                                <th className="p-4 text-center">Restriction</th>
+                                <th className="p-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                            {users.map(user => (
+                                <tr key={user.id} className="hover:bg-slate-700/20 transition-all">
+                                    <td className="p-4">
+                                        <div className="text-white font-bold text-sm">{user.name}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-mono">{user.id}</div>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="text-cyan-400 font-mono text-xs">{user.dealerId}</div>
+                                    </td>
+                                    <td className="p-4 text-right font-mono text-white text-xs">Rs {user.wallet.toLocaleString()}</td>
+                                    <td className="p-4 text-center">
+                                        <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${user.isRestricted ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}`}>
+                                            {user.isRestricted ? 'Locked' : 'Open'}
+                                        </button>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white">Profile</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {activeTab === 'games' && (
+        <div className="animate-fade-in space-y-6">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest">Market Control Center</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {games.map(game => (
+                    <div key={game.id} className="bg-slate-800/60 p-5 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between space-y-4">
+                        <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 text-cyan-400 font-black">{game.name.substring(0,2)}</div>
+                                <div>
+                                    <h4 className="text-white font-black uppercase text-base">{game.name}</h4>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Draw: {game.drawTime}</p>
+                                </div>
+                            </div>
+                            <div className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest ${game.isMarketOpen ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                                {game.isMarketOpen ? 'Bidding Open' : 'Closed'}
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center">
+                            <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Winning Result</label>
+                            {game.winningNumber && !game.winningNumber.endsWith('_') ? (
+                                <div className="text-4xl font-black text-white font-mono drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">{game.winningNumber}</div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        maxLength={2}
+                                        placeholder="--"
+                                        value={winnerInputMap[game.id] || ''}
+                                        onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})}
+                                        className="bg-slate-800 border border-slate-600 rounded-lg w-16 p-2 text-center text-xl font-mono text-white focus:ring-1 focus:ring-cyan-500"
+                                    />
+                                    <button 
+                                        onClick={async () => {
+                                            if (winnerInputMap[game.id]) {
+                                                await declareWinner?.(game.id, winnerInputMap[game.id]);
+                                                setWinnerInputMap({...winnerInputMap, [game.id]: ''});
+                                            }
+                                        }}
+                                        className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                    >Declare</button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2">
+                            {game.winningNumber && !game.payoutsApproved && (
+                                <button 
+                                    onClick={() => approvePayouts?.(game.id)}
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20"
+                                >Authorize Payouts</button>
+                            )}
+                            {game.winningNumber && (
+                                <button 
+                                    onClick={() => {
+                                        const newNum = prompt("Enter new winning number:", game.winningNumber);
+                                        if (newNum) updateWinner?.(game.id, newNum);
+                                    }}
+                                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+                                >Override Result</button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
+
+      {activeTab === 'winners' && (
+          <div className="animate-fade-in space-y-4">
+              <h3 className="text-xl font-black text-white uppercase tracking-widest">Recent Market Results</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+                {games.filter(g => g.winningNumber).map(g => (
+                    <div key={g.id} className="bg-slate-800/40 border border-slate-700 p-4 rounded-xl text-center">
+                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">{g.name}</div>
+                        <div className="text-2xl font-black text-white font-mono">{g.winningNumber}</div>
+                        <div className="text-[8px] text-slate-600 uppercase mt-1">{g.drawTime}</div>
+                    </div>
+                ))}
+              </div>
+          </div>
       )}
 
       {/* Account Management Modal */}
@@ -527,7 +652,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       <div className="p-12 text-center text-slate-700 font-black uppercase text-[10px] tracking-widest italic opacity-30">
-        Enterprise Cloud Node • Secure Admin Handshake Verified
+        Enterprise Cloud Node • Handshake Verified
       </div>
     </div>
   );
