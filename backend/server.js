@@ -158,4 +158,10 @@ app.get('*', (req, res, next) => {
 });
 
 database.connect();
+
+// SCHEDULED TASK: Check for 4:00 PM PKT Reset every 30 seconds
+setInterval(() => {
+    database.performDailyCleanup();
+}, 30000);
+
 app.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`>>> SERVER ACTIVE <<<`));

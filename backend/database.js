@@ -43,6 +43,7 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS bets (id TEXT PRIMARY KEY, userId TEXT, dealerId TEXT, gameId TEXT, subGameType TEXT, numbers TEXT, amountPerNumber REAL, totalAmount REAL, timestamp TEXT, FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (dealerId) REFERENCES dealers(id), FOREIGN KEY (gameId) REFERENCES games(id));
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY, accountId TEXT, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
             CREATE TABLE IF NOT EXISTS number_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, gameType TEXT, numberValue TEXT, limitAmount REAL, UNIQUE(gameType, numberValue));
+            CREATE TABLE IF NOT EXISTS daily_resets (reset_date TEXT PRIMARY KEY);
         `);
 
         const gameCount = db.prepare("SELECT count(*) as count FROM games").get();
@@ -94,13 +95,8 @@ const safeJsonParse = (str) => {
 const findAccountById = (id, table, ledgerLimit = 100) => {
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
-    
-    // Always fetch ledger for all account types
     account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
-    
-    if (table === 'games') {
-        account.isMarketOpen = isGameOpen(account.drawTime);
-    }
+    if (table === 'games') { account.isMarketOpen = isGameOpen(account.drawTime); }
     account.prizeRates = safeJsonParse(account.prizeRates);
     account.betLimits = safeJsonParse(account.betLimits);
     if (account.isRestricted !== undefined) account.isRestricted = !!account.isRestricted;
@@ -130,8 +126,27 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     return winningCount * bet.amountPerNumber * rate;
 };
 
+const performDailyCleanup = () => {
+    const now = new Date();
+    // PKT is UTC+5. 4:00 PM PKT = 11:00 AM UTC.
+    if (now.getUTCHours() === 11 && now.getUTCMinutes() === 0) {
+        const todayStr = now.toISOString().split('T')[0];
+        const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
+        
+        if (!alreadyDone) {
+            console.log(`>>> INITIATING DAILY RESET FOR ${todayStr} (4:00 PM PKT) <<<`);
+            db.transaction(() => {
+                db.prepare('DELETE FROM bets').run();
+                db.prepare('UPDATE games SET winningNumber = NULL, payoutsApproved = 0').run();
+                db.prepare('INSERT INTO daily_resets (reset_date) VALUES (?)').run(todayStr);
+            })();
+            console.log(`>>> RESET COMPLETE. ALL TICKETS WIPED. LEDGERS PRESERVED. <<<`);
+        }
+    }
+};
+
 module.exports = {
-    connect, findAccountById, addLedgerEntry,
+    connect, findAccountById, addLedgerEntry, performDailyCleanup,
     findAccountForLogin: (loginId) => {
         const tables = [{ n: 'users', r: 'USER' }, { n: 'dealers', r: 'DEALER' }, { n: 'admins', r: 'ADMIN' }];
         for (const t of tables) {
@@ -146,7 +161,6 @@ module.exports = {
             a.betLimits = safeJsonParse(a.betLimits);
             if (a.numbers) a.numbers = safeJsonParse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
-            // Include ledger in summary lists if needed
             a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
             return a;
         });
@@ -154,24 +168,11 @@ module.exports = {
     searchBets: (query, gameId, userId) => {
         let sql = "SELECT * FROM bets WHERE 1=1";
         const params = [];
-        if (query) {
-            sql += " AND (numbers LIKE ? OR userId LIKE ?)";
-            params.push(`%"${query}"%`, `%${query}%`);
-        }
-        if (gameId) {
-            sql += " AND gameId = ?";
-            params.push(gameId);
-        }
-        if (userId) {
-            sql += " AND userId = ?";
-            params.push(userId);
-        }
+        if (query) { sql += " AND (numbers LIKE ? OR userId LIKE ?)"; params.push(`%"${query}"%`, `%${query}%`); }
+        if (gameId) { sql += " AND gameId = ?"; params.push(gameId); }
+        if (userId) { sql += " AND userId = ?"; params.push(userId); }
         sql += " ORDER BY timestamp DESC LIMIT 500";
-        return db.prepare(sql).all(...params).map(b => ({
-            ...b,
-            numbers: JSON.parse(b.numbers),
-            timestamp: new Date(b.timestamp)
-        }));
+        return db.prepare(sql).all(...params).map(b => ({ ...b, numbers: JSON.parse(b.numbers), timestamp: new Date(b.timestamp) }));
     },
     placeBet: (userId, gameId, betGroups) => {
         return db.transaction(() => {
@@ -196,38 +197,21 @@ module.exports = {
         return db.transaction(() => {
             const recipient = findAccountById(targetId, targetTable, 0);
             if (!recipient) throw new Error(`Recipient ${targetId} not found`);
-
             const newRecipientBalance = type === 'credit' ? recipient.wallet + amount : recipient.wallet - amount;
             if (newRecipientBalance < 0) throw new Error("Insufficient funds in target account");
-            
             db.prepare(`UPDATE ${targetTable} SET wallet = ? WHERE id = ?`).run(newRecipientBalance, targetId);
-            
             const recipientRole = targetTable.slice(0, -1).toUpperCase();
             const recipientDesc = type === 'credit' ? `Deposit from ${callerId || 'Admin'}` : `Withdrawal to ${callerId || 'Admin'}`;
             addLedgerEntry(targetId, recipientRole, recipientDesc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newRecipientBalance);
-
             if (callerId) {
-                let sourceTable = '';
-                let sourceRole = '';
-                
-                if (targetTable === 'dealers') {
-                    sourceTable = 'admins';
-                    sourceRole = 'ADMIN';
-                } else if (targetTable === 'users') {
-                    sourceTable = 'dealers';
-                    sourceRole = 'DEALER';
-                }
-
+                let sourceTable = ''; let sourceRole = '';
+                if (targetTable === 'dealers') { sourceTable = 'admins'; sourceRole = 'ADMIN'; } 
+                else if (targetTable === 'users') { sourceTable = 'dealers'; sourceRole = 'DEALER'; }
                 if (sourceTable) {
                     const source = findAccountById(callerId, sourceTable, 0);
                     if (source) {
                         const newSourceBalance = type === 'credit' ? source.wallet - amount : source.wallet + amount;
-                        
-                        // Enforce strict balance checks for Dealers topping up Users
-                        if (sourceRole === 'DEALER' && type === 'credit' && newSourceBalance < 0) {
-                            throw new Error("Insufficient Dealer pool to fund user");
-                        }
-
+                        if (sourceRole === 'DEALER' && type === 'credit' && newSourceBalance < 0) throw new Error("Insufficient Dealer pool to fund user");
                         db.prepare(`UPDATE ${sourceTable} SET wallet = ? WHERE id = ?`).run(newSourceBalance, callerId);
                         const sourceDesc = type === 'credit' ? `Transfer OUT to ${targetId}` : `Transfer IN from ${targetId}`;
                         addLedgerEntry(callerId, sourceRole, sourceDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, newSourceBalance);
@@ -242,40 +226,21 @@ module.exports = {
         const bets = db.prepare('SELECT * FROM bets').all();
         const users = db.prepare('SELECT * FROM users').all();
         const dealers = db.prepare('SELECT * FROM dealers').all();
-
         const summaries = games.map(g => {
             const gameBets = bets.filter(b => b.gameId === g.id);
             let totalStake = 0, totalPayouts = 0, totalDealerProfit = 0, totalCommissions = 0;
-            
             gameBets.forEach(b => {
                 const user = users.find(u => u.id === b.userId);
                 const dealer = dealers.find(d => d.id === b.dealerId);
                 if (!user || !dealer) return;
-
                 totalStake += b.totalAmount;
-                const userComm = b.totalAmount * (user.commissionRate / 100);
-                const dealerComm = b.totalAmount * (dealer.commissionRate / 100);
-                
-                totalCommissions += userComm;
-                totalDealerProfit += dealerComm;
-
-                if (g.winningNumber && !g.winningNumber.endsWith('_')) {
-                    totalPayouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
-                }
+                totalCommissions += b.totalAmount * (user.commissionRate / 100);
+                totalDealerProfit += b.totalAmount * (dealer.commissionRate / 100);
+                if (g.winningNumber && !g.winningNumber.endsWith('_')) totalPayouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
             });
-            
             const netProfit = totalStake - totalPayouts - totalDealerProfit - totalCommissions;
-            return { 
-                gameName: g.name, 
-                winningNumber: g.winningNumber || 'Pending', 
-                totalStake, 
-                totalPayouts, 
-                totalDealerProfit, 
-                totalCommissions, 
-                netProfit 
-            };
+            return { gameName: g.name, winningNumber: g.winningNumber || 'Pending', totalStake, totalPayouts, totalDealerProfit, totalCommissions, netProfit };
         });
-
         const totals = summaries.reduce((acc, s) => ({
             totalStake: acc.totalStake + s.totalStake,
             totalPayouts: acc.totalPayouts + s.totalPayouts,
@@ -283,7 +248,6 @@ module.exports = {
             totalCommissions: acc.totalCommissions + s.totalCommissions,
             netProfit: acc.netProfit + s.netProfit
         }), { totalStake: 0, totalPayouts: 0, totalDealerProfit: 0, totalCommissions: 0, netProfit: 0 });
-
         return { games: summaries, totals };
     },
     getNumberSummary: (gameId, date) => {
@@ -292,19 +256,13 @@ module.exports = {
         if (gameId) { sql += " AND gameId = ?"; params.push(gameId); }
         if (date) { sql += " AND timestamp LIKE ?"; params.push(`${date}%`); }
         const bets = db.prepare(sql).all(...params);
-        
         const map = { '2 Digit': {}, '1 Digit Open': {}, '1 Digit Close': {} };
         const gameStakeMap = {};
-
         bets.forEach(b => {
             const nums = JSON.parse(b.numbers);
             gameStakeMap[b.gameId] = (gameStakeMap[b.gameId] || 0) + b.totalAmount;
-            
             let targetType = b.subGameType;
-            if (targetType === 'Bulk Game' || targetType === 'Combo Game') {
-                targetType = '2 Digit';
-            }
-
+            if (targetType === 'Bulk Game' || targetType === 'Combo Game') targetType = '2 Digit';
             if (map[targetType]) {
                 nums.forEach(n => {
                     const numStr = String(n);
@@ -312,19 +270,8 @@ module.exports = {
                 });
             }
         });
-
-        const transform = (m) => Object.entries(m)
-            .map(([number, stake]) => ({ number, stake }))
-            .sort((a,b) => b.stake - a.stake);
-            
-        const gameBreakdown = Object.entries(gameStakeMap).map(([gameId, stake]) => ({ gameId, stake }));
-
-        return { 
-            twoDigit: transform(map['2 Digit']), 
-            oneDigitOpen: transform(map['1 Digit Open']), 
-            oneDigitClose: transform(map['1 Digit Close']),
-            gameBreakdown
-        };
+        const transform = (m) => Object.entries(m).map(([number, stake]) => ({ number, stake })).sort((a,b) => b.stake - a.stake);
+        return { twoDigit: transform(map['2 Digit']), oneDigitOpen: transform(map['1 Digit Open']), oneDigitClose: transform(map['1 Digit Close']), gameBreakdown: Object.entries(gameStakeMap).map(([gameId, stake]) => ({ gameId, stake })) };
     },
     findUsersByDealerId: (id) => db.prepare('SELECT id FROM users WHERE LOWER(dealerId) = LOWER(?)').all(id).map(u => findAccountById(u.id, 'users')),
     findBetsByUserId: (id) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC').all(id).map(b => ({ ...b, numbers: JSON.parse(b.numbers), timestamp: new Date(b.timestamp) })),
@@ -349,29 +296,19 @@ module.exports = {
     approvePayouts: (gameId) => {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
-            if (!game || !game.winningNumber || game.payoutsApproved) {
-                return { success: false, message: "Invalid game state" };
-            }
-
+            if (!game || !game.winningNumber || game.payoutsApproved) return { success: false, message: "Invalid game state" };
             const winningNumber = game.winningNumber;
             const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId);
-
             bets.forEach(bet => {
                 const user = db.prepare('SELECT * FROM users WHERE id = ?').get(bet.userId);
                 if (!user) return;
-
                 const payout = calculatePayout(bet, winningNumber, game.name, user.prizeRates);
                 if (payout > 0) {
                     const newBalance = user.wallet + payout;
                     db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, user.id);
-                    
-                    const desc = `WIN: ${game.name} (${winningNumber}) - ${bet.subGameType} Ticket`;
-                    db.prepare(`INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                        uuidv4(), user.id, 'USER', new Date().toISOString(), desc, 0, payout, newBalance
-                    );
+                    addLedgerEntry(user.id, 'USER', `WIN: ${game.name} (${winningNumber}) - ${bet.subGameType}`, 0, payout, newBalance);
                 }
             });
-
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
             return { success: true };
         })();
