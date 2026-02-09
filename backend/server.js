@@ -29,7 +29,7 @@ app.post('/api/auth/login', (req, res) => {
     const { loginId, password } = req.body;
     const { account, role } = database.findAccountForLogin(loginId);
     if (account && account.password === password) {
-        const fullAccount = database.findAccountById(account.id, role.toLowerCase() + 's', 20);
+        const fullAccount = database.findAccountById(account.id, role.toLowerCase() + 's', 100);
         const token = jwt.sign({ id: account.id, role }, JWT_SECRET, { expiresIn: '1d' });
         return res.json({ token, role, account: fullAccount });
     }
@@ -41,9 +41,18 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
     const account = database.findAccountById(req.user.id, role.toLowerCase() + 's', 100);
     if (!account) return res.status(404).json({ message: 'Not found' });
     let extra = {};
-    if (role === 'DEALER') { extra.users = database.findUsersByDealerId(req.user.id); extra.bets = database.findBetsByDealerId(req.user.id); }
-    else if (role === 'USER') { extra.bets = database.findBetsByUserId(req.user.id); }
-    else if (role === 'ADMIN') { extra.dealers = database.getAllFromTable('dealers'); extra.users = database.getAllFromTable('users'); extra.bets = database.getAllFromTable('bets'); }
+    if (role === 'DEALER') { 
+        extra.users = database.findUsersByDealerId(req.user.id); 
+        extra.bets = database.findBetsByDealerId(req.user.id); 
+    }
+    else if (role === 'USER') { 
+        extra.bets = database.findBetsByUserId(req.user.id); 
+    }
+    else if (role === 'ADMIN') { 
+        extra.dealers = database.getAllFromTable('dealers'); 
+        extra.users = database.getAllFromTable('users'); 
+        extra.bets = database.getAllFromTable('bets'); 
+    }
     res.json({ account, role, ...extra });
 });
 
@@ -81,11 +90,42 @@ app.post('/api/dealer/users', authMiddleware, (req, res) => {
 app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => { database.deleteUser(req.params.id); res.json({ success: true }); });
 
 app.post('/api/user/bets', authMiddleware, (req, res) => res.json(database.placeBet(req.user.id, req.body.gameId, req.body.betGroups)));
-app.post('/api/dealer/topup/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit') }));
-app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit') }));
 
-app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit', req.user.id) }));
-app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => res.json({ success: true, balance: database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit', req.user.id) }));
+app.post('/api/dealer/topup/user', authMiddleware, (req, res) => {
+    try {
+        const balance = database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit', req.user.id);
+        res.json({ success: true, balance });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
+
+app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => {
+    try {
+        const balance = database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit', req.user.id);
+        res.json({ success: true, balance });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
+
+app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => {
+    try {
+        const balance = database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit', req.user.id);
+        res.json({ success: true, balance });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
+
+app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => {
+    try {
+        const balance = database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit', req.user.id);
+        res.json({ success: true, balance });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
 
 app.put('/api/admin/accounts/:type/:id/toggle-restriction', authMiddleware, (req, res) => {
     database.toggleRestriction(req.params.id, req.params.type === 'user' ? 'users' : 'dealers');

@@ -255,7 +255,7 @@ const DashboardView: React.FC<{ summary: FinancialSummary | null; admin: Admin; 
     return (
         <div className="animate-fade-in space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                <SummaryCard title="Vault Balance (Admin)" value={admin.wallet} color="text-white" onClick={onOpenAdminLedger} />
+                <SummaryCard title="Vault Balance (Guru)" value={admin.wallet} color="text-white" onClick={onOpenAdminLedger} />
                 <SummaryCard title="Total Stake" value={summary.totals?.totalStake} color="text-cyan-400" />
                 <SummaryCard title="Total Payouts" value={summary.totals?.totalPayouts} color="text-amber-400" />
                 <SummaryCard title="Net Profit" value={summary.totals?.netProfit} color={summary.totals?.netProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
@@ -954,11 +954,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       </Modal>
 
       {/* Transaction Modals */}
-      <Modal isOpen={isDepositModalOpen} onClose={() => { setIsDepositModalOpen(false); setActionDealerId(undefined); }} title="Internal Deposit (Admin -> Dealer)" themeColor="emerald">
+      <Modal isOpen={isDepositModalOpen} onClose={() => { setIsDepositModalOpen(false); setActionDealerId(undefined); }} title="Internal Deposit (Guru -> Dealer)" themeColor="emerald">
           <DealerTransactionForm type="Top-Up" dealers={dealers} fixedDealerId={actionDealerId} onCancel={() => setIsDepositModalOpen(false)} onTransaction={async (id, amt) => { await topUpDealerWallet(id, amt); setIsDepositModalOpen(false); }} />
       </Modal>
 
-      <Modal isOpen={isWithdrawModalOpen} onClose={() => { setIsWithdrawModalOpen(false); setActionDealerId(undefined); }} title="Internal Withdrawal (Dealer -> Admin)" themeColor="amber">
+      <Modal isOpen={isWithdrawModalOpen} onClose={() => { setIsWithdrawModalOpen(false); setActionDealerId(undefined); }} title="Internal Withdrawal (Dealer -> Guru)" themeColor="amber">
           <DealerTransactionForm type="Withdrawal" dealers={dealers} fixedDealerId={actionDealerId} onCancel={() => setIsWithdrawModalOpen(false)} onTransaction={async (id, amt) => { await withdrawFromDealerWallet(id, amt); setIsWithdrawModalOpen(false); }} />
       </Modal>
 
@@ -970,7 +970,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       <div className="p-12 text-center text-slate-700 font-black uppercase text-[10px] tracking-widest italic opacity-30">
-        Enterprise Cloud Node • Handshake Verified
+        Enterprise Cloud Node • Handshake Verified • ABABA v1.1
       </div>
     </div>
   );

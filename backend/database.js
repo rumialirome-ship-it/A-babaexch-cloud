@@ -91,12 +91,14 @@ const safeJsonParse = (str) => {
     try { return JSON.parse(str); } catch (e) { return str; }
 };
 
-const findAccountById = (id, table, ledgerLimit = 50) => {
+const findAccountById = (id, table, ledgerLimit = 100) => {
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
-    if (table !== 'games') {
-        account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
-    } else {
+    
+    // Always fetch ledger for all account types
+    account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+    
+    if (table === 'games') {
         account.isMarketOpen = isGameOpen(account.drawTime);
     }
     account.prizeRates = safeJsonParse(account.prizeRates);
@@ -144,6 +146,8 @@ module.exports = {
             a.betLimits = safeJsonParse(a.betLimits);
             if (a.numbers) a.numbers = safeJsonParse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
+            // Include ledger in summary lists if needed
+            a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
             return a;
         });
     },
@@ -188,27 +192,49 @@ module.exports = {
             return { success: true, newBalance };
         })();
     },
-    updateWallet: (id, table, amount, type, adminId = null) => {
+    updateWallet: (targetId, targetTable, amount, type, callerId = null) => {
         return db.transaction(() => {
-            const acc = findAccountById(id, table, 0);
-            const newBalance = type === 'credit' ? acc.wallet + amount : acc.wallet - amount;
-            if (newBalance < 0) throw new Error("Insufficient funds");
-            db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
-            
-            const role = table.slice(0, -1).toUpperCase();
-            const desc = type === 'credit' ? `Deposit received from Admin` : `Withdrawal processed by Admin`;
-            addLedgerEntry(id, role, desc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newBalance);
+            const recipient = findAccountById(targetId, targetTable, 0);
+            if (!recipient) throw new Error(`Recipient ${targetId} not found`);
 
-            if (adminId && table === 'dealers') {
-                const admin = findAccountById(adminId, 'admins', 0);
-                if (admin) {
-                    const adminNewBalance = type === 'credit' ? admin.wallet - amount : admin.wallet + amount;
-                    db.prepare(`UPDATE admins SET wallet = ? WHERE id = ?`).run(adminNewBalance, adminId);
-                    const adminDesc = type === 'credit' ? `Transfer to Dealer ${id}` : `Transfer from Dealer ${id}`;
-                    addLedgerEntry(adminId, 'ADMIN', adminDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, adminNewBalance);
+            const newRecipientBalance = type === 'credit' ? recipient.wallet + amount : recipient.wallet - amount;
+            if (newRecipientBalance < 0) throw new Error("Insufficient funds in target account");
+            
+            db.prepare(`UPDATE ${targetTable} SET wallet = ? WHERE id = ?`).run(newRecipientBalance, targetId);
+            
+            const recipientRole = targetTable.slice(0, -1).toUpperCase();
+            const recipientDesc = type === 'credit' ? `Deposit from ${callerId || 'Admin'}` : `Withdrawal to ${callerId || 'Admin'}`;
+            addLedgerEntry(targetId, recipientRole, recipientDesc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newRecipientBalance);
+
+            if (callerId) {
+                let sourceTable = '';
+                let sourceRole = '';
+                
+                if (targetTable === 'dealers') {
+                    sourceTable = 'admins';
+                    sourceRole = 'ADMIN';
+                } else if (targetTable === 'users') {
+                    sourceTable = 'dealers';
+                    sourceRole = 'DEALER';
+                }
+
+                if (sourceTable) {
+                    const source = findAccountById(callerId, sourceTable, 0);
+                    if (source) {
+                        const newSourceBalance = type === 'credit' ? source.wallet - amount : source.wallet + amount;
+                        
+                        // Enforce strict balance checks for Dealers topping up Users
+                        if (sourceRole === 'DEALER' && type === 'credit' && newSourceBalance < 0) {
+                            throw new Error("Insufficient Dealer pool to fund user");
+                        }
+
+                        db.prepare(`UPDATE ${sourceTable} SET wallet = ? WHERE id = ?`).run(newSourceBalance, callerId);
+                        const sourceDesc = type === 'credit' ? `Transfer OUT to ${targetId}` : `Transfer IN from ${targetId}`;
+                        addLedgerEntry(callerId, sourceRole, sourceDesc, type === 'credit' ? amount : 0, type === 'debit' ? amount : 0, newSourceBalance);
+                    }
                 }
             }
-            return newBalance;
+            return newRecipientBalance;
         })();
     },
     getFinancialSummary: () => {
@@ -274,7 +300,6 @@ module.exports = {
             const nums = JSON.parse(b.numbers);
             gameStakeMap[b.gameId] = (gameStakeMap[b.gameId] || 0) + b.totalAmount;
             
-            // Map special sub-game types to core digit types for summary
             let targetType = b.subGameType;
             if (targetType === 'Bulk Game' || targetType === 'Combo Game') {
                 targetType = '2 Digit';
