@@ -128,7 +128,6 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
 
 const performDailyCleanup = () => {
     const now = new Date();
-    // PKT is UTC+5. 4:00 PM PKT = 11:00 AM UTC.
     if (now.getUTCHours() === 11 && now.getUTCMinutes() === 0) {
         const todayStr = now.toISOString().split('T')[0];
         const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
@@ -174,22 +173,45 @@ module.exports = {
         sql += " ORDER BY timestamp DESC LIMIT 500";
         return db.prepare(sql).all(...params).map(b => ({ ...b, numbers: JSON.parse(b.numbers), timestamp: new Date(b.timestamp) }));
     },
-    placeBet: (userId, gameId, betGroups) => {
+    placeBet: (userId, betData) => {
         return db.transaction(() => {
             const user = findAccountById(userId, 'users', 0);
             if (!user || user.isRestricted) throw new Error("Unauthorized or Restricted");
-            const game = findAccountById(gameId, 'games');
-            if (!game || !isGameOpen(game.drawTime)) throw new Error("Market Closed");
-            const totalStake = betGroups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
+
+            let totalStake = 0;
+            const gamesToBet = [];
+
+            if (betData.isMultiGame) {
+                for (const gId in betData.multiGameBets) {
+                    const game = findAccountById(gId, 'games');
+                    if (!game || !isGameOpen(game.drawTime)) continue;
+                    const groups = betData.multiGameBets[gId].betGroups;
+                    const gameStake = groups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
+                    totalStake += gameStake;
+                    gamesToBet.push({ gId, groups, name: game.name });
+                }
+            } else {
+                const game = findAccountById(betData.gameId, 'games');
+                if (!game || !isGameOpen(game.drawTime)) throw new Error("Market Closed");
+                totalStake = betData.betGroups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
+                gamesToBet.push({ gId: betData.gameId, groups: betData.betGroups, name: game.name });
+            }
+
+            if (totalStake <= 0) throw new Error("No valid bets found or markets closed.");
             if (user.wallet < totalStake) throw new Error("Insufficient Balance");
+
             const newBalance = user.wallet - totalStake;
             db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, userId);
-            betGroups.forEach(g => {
-                db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                    uuidv4(), userId, user.dealerId, gameId, g.subGameType, JSON.stringify(g.numbers), g.amountPerNumber, g.numbers.length * g.amountPerNumber, new Date().toISOString()
-                );
+
+            gamesToBet.forEach(task => {
+                task.groups.forEach(g => {
+                    db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                        uuidv4(), userId, user.dealerId, task.gId, g.subGameType, JSON.stringify(g.numbers), g.amountPerNumber, g.numbers.length * g.amountPerNumber, new Date().toISOString()
+                    );
+                });
             });
-            addLedgerEntry(userId, 'USER', `Bet on ${game.name}`, totalStake, 0, newBalance);
+
+            addLedgerEntry(userId, 'USER', `Bulk Bet: ${gamesToBet.map(g => g.name).join(', ')}`, totalStake, 0, newBalance);
             return { success: true, newBalance };
         })();
     },

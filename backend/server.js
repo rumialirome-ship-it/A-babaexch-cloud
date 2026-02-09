@@ -87,9 +87,39 @@ app.post('/api/dealer/users', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
+app.put('/api/dealer/users/:id', authMiddleware, (req, res) => {
+    const user = database.findAccountById(req.params.id, 'users');
+    if (user && user.dealerId === req.user.id) {
+        database.updateUser(req.params.id, req.body);
+        res.json({ success: true });
+    } else {
+        res.status(403).json({ message: 'Access Denied: Not your user' });
+    }
+});
+
 app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => { database.deleteUser(req.params.id); res.json({ success: true }); });
 
-app.post('/api/user/bets', authMiddleware, (req, res) => res.json(database.placeBet(req.user.id, req.body.gameId, req.body.betGroups)));
+app.post('/api/user/bets', authMiddleware, (req, res) => {
+    try {
+        res.json(database.placeBet(req.user.id, req.body));
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
+
+app.post('/api/dealer/bets/bulk', authMiddleware, (req, res) => {
+    try {
+        // Dealer initiating bet for their user via terminal
+        const user = database.findAccountById(req.body.userId, 'users');
+        if (user && user.dealerId === req.user.id) {
+            res.json(database.placeBet(req.body.userId, req.body));
+        } else {
+            res.status(403).json({ message: 'Unauthorized terminal access' });
+        }
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
 
 app.post('/api/dealer/topup/user', authMiddleware, (req, res) => {
     try {
@@ -159,7 +189,6 @@ app.get('*', (req, res, next) => {
 
 database.connect();
 
-// SCHEDULED TASK: Check for 4:00 PM PKT Reset every 30 seconds
 setInterval(() => {
     database.performDailyCleanup();
 }, 30000);
