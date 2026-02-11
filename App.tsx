@@ -141,9 +141,16 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         if (games.length > 0 && lastGamesRef.current.length > 0) {
+            const revealEligibleGames = ['Ali Baba', 'OLA TV', 'OYO TV'];
             games.forEach(newGame => {
                 const oldGame = lastGamesRef.current.find(g => g.id === newGame.id);
-                if (newGame.winningNumber && !newGame.winningNumber.endsWith('_') && (!oldGame?.winningNumber || oldGame.winningNumber.endsWith('_'))) {
+                // Trigger reveal ONLY if winning number is newly added AND game is in the whitelist
+                if (
+                    revealEligibleGames.includes(newGame.name) &&
+                    newGame.winningNumber && 
+                    !newGame.winningNumber.endsWith('_') && 
+                    (!oldGame?.winningNumber || oldGame.winningNumber.endsWith('_'))
+                ) {
                     setActiveReveal({ name: newGame.name, number: newGame.winningNumber });
                 }
             });

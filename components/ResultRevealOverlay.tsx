@@ -61,7 +61,8 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
   const [elapsed, setElapsed] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
 
-  const TOTAL_ROLL_TIME = 48500; // Original + 45s for maximum tension
+  // Speed up the reveal to exactly 30 seconds as requested
+  const TOTAL_ROLL_TIME = 30000; 
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -76,9 +77,10 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
         setDisplayNum(randomNum);
       }, 40);
 
+      // Cycle phrases every 3.75s to fit 8 phrases into 30s
       phraseInterval = setInterval(() => {
         setPhraseIndex(prev => (prev + 1) % TENSION_PHRASES.length);
-      }, 6000);
+      }, 3750);
 
       progressInterval = setInterval(() => {
         setElapsed(prev => prev + 100);
