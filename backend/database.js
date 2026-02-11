@@ -30,6 +30,7 @@ function isGameOpen(drawTime) {
 
 const connect = () => {
     try {
+        const dbExists = fs.existsSync(DB_PATH);
         db = new Database(DB_PATH);
         db.pragma('journal_mode = WAL');
         db.pragma('synchronous = NORMAL');
@@ -49,8 +50,10 @@ const connect = () => {
             CREATE INDEX IF NOT EXISTS idx_users_dealerId ON users(dealerId);
         `);
 
+        // ONLY Migrate if database is brand new and games table is empty
         const gameCount = db.prepare("SELECT count(*) as count FROM games").get();
         if (gameCount.count === 0 && fs.existsSync(JSON_DB_PATH)) {
+            console.log(">>> FIRST TIME SETUP: Migrating from db.json <<<");
             const data = JSON.parse(fs.readFileSync(JSON_DB_PATH, 'utf-8'));
             db.transaction(() => {
                 if (data.admin) {
@@ -83,6 +86,8 @@ const connect = () => {
                 }
             })();
             console.log(">>> DATABASE INITIALIZED <<<");
+        } else {
+            console.log(">>> DATABASE LOADED: " + gameCount.count + " games found. skipping migration. <<<");
         }
     } catch (error) {
         console.error('Database connection error:', error);
@@ -139,12 +144,14 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
 
 const performDailyCleanup = () => {
     const now = new Date();
+    // Use local time check for 4:00 PM PKT (UTC 11:00 AM)
     if (now.getUTCHours() === 11 && now.getUTCMinutes() === 0) {
         const todayStr = now.toISOString().split('T')[0];
         const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
         
         if (!alreadyDone) {
             db.transaction(() => {
+                // Clear active lottery bets and results to start fresh market cycle
                 db.prepare('DELETE FROM bets').run();
                 db.prepare('UPDATE games SET winningNumber = NULL, payoutsApproved = 0').run();
                 db.prepare('INSERT INTO daily_resets (reset_date) VALUES (?)').run(todayStr);

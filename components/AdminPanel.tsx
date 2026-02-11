@@ -606,7 +606,7 @@ const BetSearchView: React.FC<{ games: Game[]; users: User[]; fetchWithAuth: any
                                     <tr key={bet.id} className="hover:bg-slate-700/20 transition-all">
                                         <td className="p-4 text-[10px] text-slate-400 font-mono">{bet.timestamp.toLocaleString()}</td>
                                         <td className="p-4">
-                                            <div className="text-white font-bold text-xs">{user?.name || '---'}</div>
+                                            <div className="text-white font-bold text-sm">{user?.name || '---'}</div>
                                             <div className="text-[9px] text-slate-500 uppercase font-mono">{bet.userId}</div>
                                         </td>
                                         <td className="p-4 text-cyan-400 font-black text-xs uppercase">{game?.name || '---'}</td>
@@ -705,6 +705,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingLedgerType, setViewingLedgerType] = useState<'dealer' | 'admin' | null>(null);
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
+  const [pendingDeclareMap, setPendingDeclareMap] = useState<Record<string, boolean>>({});
   
   // Search State
   const [dealerSearchQuery, setDealerSearchQuery] = useState('');
@@ -761,6 +762,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     if (viewingLedgerType === 'dealer') return dealers.find(d => d.id === viewingLedgerId);
     return null;
   }, [viewingLedgerId, viewingLedgerType, admin, dealers]);
+
+  const handleDeclareAction = async (gameId: string, isUpdate: boolean) => {
+    const val = winnerInputMap[gameId];
+    if (!val) return;
+
+    // Optimistic Update: Close input immediately and set pending status
+    setPendingDeclareMap(prev => ({ ...prev, [gameId]: true }));
+    setEditingWinnerMap(prev => ({ ...prev, [gameId]: false }));
+    
+    try {
+        if (isUpdate) {
+            await updateWinner?.(gameId, val);
+        } else {
+            await declareWinner?.(gameId, val);
+        }
+        // Cleanup local input
+        setWinnerInputMap(prev => {
+            const next = { ...prev };
+            delete next[gameId];
+            return next;
+        });
+    } catch (error) {
+        console.error("Action failed", error);
+        alert("Operation failed. Reverting.");
+        // Re-open if failed
+        setEditingWinnerMap(prev => ({ ...prev, [gameId]: true }));
+    } finally {
+        setPendingDeclareMap(prev => ({ ...prev, [gameId]: false }));
+    }
+  };
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
@@ -964,6 +995,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {games.map(game => {
                     const isEditing = editingWinnerMap[game.id];
+                    const isPending = pendingDeclareMap[game.id];
                     const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
                     
                     return (
@@ -981,10 +1013,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </div>
                             </div>
 
-                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center group">
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center group min-h-[140px] justify-center">
                                 <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Winning Result</label>
                                 
-                                {winningNumber && !isEditing ? (
+                                {isPending ? (
+                                    <div className="flex flex-col items-center gap-2 animate-pulse">
+                                        <div className="w-8 h-8 border-4 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin"></div>
+                                        <span className="text-[10px] text-cyan-400 font-black uppercase">Publishing...</span>
+                                    </div>
+                                ) : winningNumber && !isEditing ? (
                                     <div className="relative group cursor-pointer active:scale-95 transition-transform" onClick={() => {
                                         setEditingWinnerMap({ ...editingWinnerMap, [game.id]: true });
                                         setWinnerInputMap({ ...winnerInputMap, [game.id]: winningNumber });
@@ -1011,18 +1048,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                                 className="bg-slate-800 border border-slate-600 rounded-lg w-20 p-2 text-center text-2xl font-mono text-white focus:ring-1 focus:ring-cyan-500 shadow-inner"
                                             />
                                             <button 
-                                                onClick={async () => {
-                                                    const val = winnerInputMap[game.id];
-                                                    if (val) {
-                                                        if (winningNumber) {
-                                                            await updateWinner?.(game.id, val);
-                                                        } else {
-                                                            await declareWinner?.(game.id, val);
-                                                        }
-                                                        setWinnerInputMap({...winnerInputMap, [game.id]: ''});
-                                                        setEditingWinnerMap({ ...editingWinnerMap, [game.id]: false });
-                                                    }
-                                                }}
+                                                onClick={() => handleDeclareAction(game.id, !!winningNumber)}
                                                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-90 active:bg-emerald-700"
                                             >
                                                 {winningNumber ? 'Update' : 'Declare'}
