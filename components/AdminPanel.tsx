@@ -402,11 +402,11 @@ const LiveBetsView: React.FC<{ games: Game[]; bets: Bet[]; users: User[] }> = ({
     }, [bets]);
 
     const marketExposures = useMemo(() => {
-        return liveGames.map(game => {
-            const gameBets = bets.filter(b => b.gameId === game.id);
+        return liveGames.map(market => {
+            const gameBets = bets.filter(b => b.gameId === market.id);
             const totalStake = gameBets.reduce((sum, b) => sum + b.totalAmount, 0);
             return {
-                ...game,
+                ...market,
                 totalStake,
                 betCount: gameBets.length
             };
@@ -684,6 +684,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingLedgerType, setViewingLedgerType] = useState<'dealer' | 'admin' | null>(null);
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -695,12 +696,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: 'dashboard', label: 'Stats', icon: Icons.chartBar },
     { id: 'live', label: 'Live', icon: <span className="animate-pulse flex items-center justify-center bg-red-500 w-2 h-2 rounded-full mr-2"></span> },
     { id: 'stakes', label: 'Stakes', icon: Icons.clipboardList },
+    { id: 'ledger', label: 'Vault Ledger', icon: Icons.bookOpen },
     { id: 'dealers', label: 'Dealers', icon: Icons.userGroup }, 
     { id: 'users', label: 'Users', icon: Icons.user },
     { id: 'search', label: 'Bet Search', icon: Icons.search },
     { id: 'games', label: 'Markets', icon: Icons.gamepad },
     { id: 'winners', label: 'Winners', icon: Icons.star },
   ];
+
+  const filteredDealers = useMemo(() => {
+    return (dealers || []).filter(d => {
+        const query = dealerSearchQuery.toLowerCase();
+        return (d.name || '').toLowerCase().includes(query) || 
+               (d.id || '').toLowerCase().includes(query) || 
+               (d.area || '').toLowerCase().includes(query);
+    });
+  }, [dealers, dealerSearchQuery]);
 
   const activeLedgerAccount = useMemo(() => {
     if (!viewingLedgerId) return null;
@@ -722,18 +733,42 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
       
-      {activeTab === 'dashboard' && <DashboardView summary={summaryData} admin={admin} onOpenAdminLedger={() => { setViewingLedgerId(admin.id); setViewingLedgerType('admin'); }} />}
+      {activeTab === 'dashboard' && <DashboardView summary={summaryData} admin={admin} onOpenAdminLedger={() => { setActiveTab('ledger'); }} />}
       {activeTab === 'live' && <LiveBetsView games={games} bets={bets} users={users} />}
       {activeTab === 'stakes' && <NumberSummaryView fetchWithAuth={fetchWithAuth} games={games} />}
       {activeTab === 'search' && <BetSearchView fetchWithAuth={fetchWithAuth} games={games} users={users} />}
+      {activeTab === 'ledger' && (
+        <div className="animate-fade-in space-y-4">
+             <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">Master Vault Audit</h3>
+                <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
+                    <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest block mb-0.5">Guru Balance</span>
+                    <span className="text-emerald-400 font-mono font-black">PKR {admin.wallet.toLocaleString()}</span>
+                </div>
+            </div>
+            <LedgerTable entries={admin.ledger || []} />
+        </div>
+      )}
 
       {activeTab === 'dealers' && (
         <div className="animate-fade-in space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Dealer Network</h3>
-            <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700">Add New Dealer</button>
+            <div className="flex gap-2">
+                <div className="relative flex-grow sm:w-64">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
+                    <input 
+                        type="text" 
+                        placeholder="Search dealers by ID, Name or Area..." 
+                        value={dealerSearchQuery} 
+                        onChange={(e) => setDealerSearchQuery(e.target.value)} 
+                        className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-red-500 h-10" 
+                    />
+                </div>
+                <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700 h-10">Add Dealer</button>
+            </div>
           </div>
-          <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm">
+          <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm shadow-2xl">
              <div className="overflow-x-auto">
                  <table className="w-full text-left min-w-[900px]">
                      <thead className="bg-slate-800/80 border-b border-slate-700">
@@ -747,7 +782,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                          </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-800">
-                         {dealers.map(dealer => (
+                         {filteredDealers.map(dealer => (
                              <tr key={dealer.id} className="hover:bg-slate-700/20 transition-all">
                                  <td className="p-4">
                                      <div className="text-white font-black text-sm uppercase">{dealer.name}</div>
@@ -778,8 +813,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                  </td>
                              </tr>
                          ))}
-                         {dealers.length === 0 && (
-                            <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-bold uppercase text-xs tracking-widest">No Registered Dealers</td></tr>
+                         {filteredDealers.length === 0 && (
+                            <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-bold uppercase text-xs tracking-widest">No Dealers Found {dealerSearchQuery && `Matching "${dealerSearchQuery}"`}</td></tr>
                          )}
                      </tbody>
                  </table>

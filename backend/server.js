@@ -65,10 +65,11 @@ app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
 
 app.post('/api/admin/dealers', authMiddleware, (req, res) => {
     const d = req.body;
-    require('better-sqlite3')(path.join(__dirname, 'database.sqlite')).prepare('INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    const dbInstance = require('better-sqlite3')(path.join(__dirname, 'database.sqlite'));
+    dbInstance.prepare('INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
         d.id, d.name, d.password, d.area, d.contact, d.wallet, d.commissionRate, JSON.stringify(d.prizeRates)
     );
-    database.addLedgerEntry(d.id, 'DEALER', 'Initial Allocation', 0, d.wallet, d.wallet);
+    database.addLedgerEntry(d.id, 'DEALER', 'Initial Allocation from Master', 0, d.wallet, d.wallet);
     res.json({ success: true });
 });
 
@@ -89,15 +90,28 @@ app.post('/api/dealer/users', authMiddleware, (req, res) => {
 
 app.put('/api/dealer/users/:id', authMiddleware, (req, res) => {
     const user = database.findAccountById(req.params.id, 'users');
-    if (user && user.dealerId === req.user.id) {
+    if (user && user.dealerId.toLowerCase() === req.user.id.toLowerCase()) {
         database.updateUser(req.params.id, req.body);
         res.json({ success: true });
     } else {
-        res.status(403).json({ message: 'Access Denied: Not your user' });
+        res.status(403).json({ message: 'Access Denied' });
     }
 });
 
-app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => { database.deleteUser(req.params.id); res.json({ success: true }); });
+app.put('/api/dealer/users/:id/toggle-restriction', authMiddleware, (req, res) => {
+    const user = database.findAccountById(req.params.id, 'users');
+    if (user && user.dealerId.toLowerCase() === req.user.id.toLowerCase()) {
+        database.toggleRestriction(req.params.id, 'users');
+        res.json({ success: true });
+    } else {
+        res.status(403).json({ message: 'Access Denied' });
+    }
+});
+
+app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => {
+    database.deleteUser(req.params.id);
+    res.json({ success: true });
+});
 
 app.post('/api/user/bets', authMiddleware, (req, res) => {
     try {
@@ -109,9 +123,8 @@ app.post('/api/user/bets', authMiddleware, (req, res) => {
 
 app.post('/api/dealer/bets/bulk', authMiddleware, (req, res) => {
     try {
-        // Dealer initiating bet for their user via terminal
         const user = database.findAccountById(req.body.userId, 'users');
-        if (user && user.dealerId === req.user.id) {
+        if (user && user.dealerId.toLowerCase() === req.user.id.toLowerCase()) {
             res.json(database.placeBet(req.body.userId, req.body));
         } else {
             res.status(403).json({ message: 'Unauthorized terminal access' });

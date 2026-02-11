@@ -42,8 +42,11 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, name TEXT, drawTime TEXT, winningNumber TEXT, payoutsApproved INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS bets (id TEXT PRIMARY KEY, userId TEXT, dealerId TEXT, gameId TEXT, subGameType TEXT, numbers TEXT, amountPerNumber REAL, totalAmount REAL, timestamp TEXT, FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (dealerId) REFERENCES dealers(id), FOREIGN KEY (gameId) REFERENCES games(id));
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY, accountId TEXT, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
-            CREATE TABLE IF NOT EXISTS number_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, gameType TEXT, numberValue TEXT, limitAmount REAL, UNIQUE(gameType, numberValue));
             CREATE TABLE IF NOT EXISTS daily_resets (reset_date TEXT PRIMARY KEY);
+            
+            CREATE INDEX IF NOT EXISTS idx_ledgers_accountId ON ledgers(accountId);
+            CREATE INDEX IF NOT EXISTS idx_bets_userId ON bets(userId);
+            CREATE INDEX IF NOT EXISTS idx_users_dealerId ON users(dealerId);
         `);
 
         const gameCount = db.prepare("SELECT count(*) as count FROM games").get();
@@ -93,12 +96,20 @@ const safeJsonParse = (str) => {
 };
 
 const findAccountById = (id, table, ledgerLimit = 100) => {
+    if (!id) return null;
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
-    account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
-    if (table === 'games') { account.isMarketOpen = isGameOpen(account.drawTime); }
-    account.prizeRates = safeJsonParse(account.prizeRates);
-    account.betLimits = safeJsonParse(account.betLimits);
+    
+    account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({
+        ...l, 
+        timestamp: new Date(l.timestamp)
+    }));
+    
+    if (table === 'games') {
+        account.isMarketOpen = isGameOpen(account.drawTime);
+    }
+    if (account.prizeRates) account.prizeRates = safeJsonParse(account.prizeRates);
+    if (account.betLimits) account.betLimits = safeJsonParse(account.betLimits);
     if (account.isRestricted !== undefined) account.isRestricted = !!account.isRestricted;
     return account;
 };
@@ -133,13 +144,12 @@ const performDailyCleanup = () => {
         const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
         
         if (!alreadyDone) {
-            console.log(`>>> INITIATING DAILY RESET FOR ${todayStr} (4:00 PM PKT) <<<`);
             db.transaction(() => {
                 db.prepare('DELETE FROM bets').run();
                 db.prepare('UPDATE games SET winningNumber = NULL, payoutsApproved = 0').run();
                 db.prepare('INSERT INTO daily_resets (reset_date) VALUES (?)').run(todayStr);
             })();
-            console.log(`>>> RESET COMPLETE. ALL TICKETS WIPED. LEDGERS PRESERVED. <<<`);
+            console.log(`>>> DAILY RESET COMPLETE FOR ${todayStr} (4:00 PM PKT) <<<`);
         }
     }
 };
@@ -156,8 +166,8 @@ module.exports = {
     },
     getAllFromTable: (table) => {
         return db.prepare(`SELECT * FROM ${table}`).all().map(a => {
-            a.prizeRates = safeJsonParse(a.prizeRates);
-            a.betLimits = safeJsonParse(a.betLimits);
+            if (a.prizeRates) a.prizeRates = safeJsonParse(a.prizeRates);
+            if (a.betLimits) a.betLimits = safeJsonParse(a.betLimits);
             if (a.numbers) a.numbers = safeJsonParse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
             a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
@@ -175,15 +185,18 @@ module.exports = {
     },
     placeBet: (userId, betData) => {
         return db.transaction(() => {
-            const user = findAccountById(userId, 'users', 0);
+            const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
             if (!user || user.isRestricted) throw new Error("Unauthorized or Restricted");
+
+            const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(user.dealerId);
+            if (!dealer) throw new Error("Parent Dealer not found");
 
             let totalStake = 0;
             const gamesToBet = [];
 
-            if (betData.isMultiGame) {
+            if (betData.isMultiGame && betData.multiGameBets) {
                 for (const gId in betData.multiGameBets) {
-                    const game = findAccountById(gId, 'games');
+                    const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gId);
                     if (!game || !isGameOpen(game.drawTime)) continue;
                     const groups = betData.multiGameBets[gId].betGroups;
                     const gameStake = groups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
@@ -191,28 +204,47 @@ module.exports = {
                     gamesToBet.push({ gId, groups, name: game.name });
                 }
             } else {
-                const game = findAccountById(betData.gameId, 'games');
+                const game = db.prepare('SELECT * FROM games WHERE id = ?').get(betData.gameId);
                 if (!game || !isGameOpen(game.drawTime)) throw new Error("Market Closed");
-                totalStake = betData.betGroups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
-                gamesToBet.push({ gId: betData.gameId, groups: betData.betGroups, name: game.name });
+                const betGroups = betData.betGroups || [];
+                totalStake = betGroups.reduce((s, g) => s + g.numbers.length * g.amountPerNumber, 0);
+                gamesToBet.push({ gId: betData.gameId, groups: betGroups, name: game.name });
             }
 
             if (totalStake <= 0) throw new Error("No valid bets found or markets closed.");
             if (user.wallet < totalStake) throw new Error("Insufficient Balance");
 
-            const newBalance = user.wallet - totalStake;
-            db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, userId);
+            // 1. Calculate Commissions
+            const userComm = totalStake * (user.commissionRate / 100);
+            const dealerComm = totalStake * (dealer.commissionRate / 100);
 
+            // 2. Update User Wallet (Deduct Stake + Add Commission)
+            const newUserBalance = user.wallet - totalStake + userComm;
+            db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newUserBalance, userId);
+
+            // 3. Update Dealer Wallet (Add Commission)
+            const newDealerBalance = dealer.wallet + dealerComm;
+            db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(newDealerBalance, dealer.id);
+
+            // 4. Record Bets
             gamesToBet.forEach(task => {
                 task.groups.forEach(g => {
                     db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                        uuidv4(), userId, user.dealerId, task.gId, g.subGameType, JSON.stringify(g.numbers), g.amountPerNumber, g.numbers.length * g.amountPerNumber, new Date().toISOString()
+                        uuidv4(), userId, dealer.id, task.gId, g.subGameType, JSON.stringify(g.numbers), g.amountPerNumber, g.numbers.length * g.amountPerNumber, new Date().toISOString()
                     );
                 });
             });
 
-            addLedgerEntry(userId, 'USER', `Bulk Bet: ${gamesToBet.map(g => g.name).join(', ')}`, totalStake, 0, newBalance);
-            return { success: true, newBalance };
+            // 5. Ledger Logging
+            const gameNames = gamesToBet.map(g => g.name).join(', ');
+            // User: Bet Debit
+            addLedgerEntry(userId, 'USER', `Bet on: ${gameNames}`, totalStake, 0, user.wallet - totalStake);
+            // User: Commission Credit
+            addLedgerEntry(userId, 'USER', `Commission Cashback: ${gameNames}`, 0, userComm, newUserBalance);
+            // Dealer: Commission Credit
+            addLedgerEntry(dealer.id, 'DEALER', `Commission from ${userId}: ${gameNames}`, 0, dealerComm, newDealerBalance);
+
+            return { success: true, newBalance: newUserBalance };
         })();
     },
     updateWallet: (targetId, targetTable, amount, type, callerId = null) => {
@@ -223,12 +255,15 @@ module.exports = {
             if (newRecipientBalance < 0) throw new Error("Insufficient funds in target account");
             db.prepare(`UPDATE ${targetTable} SET wallet = ? WHERE id = ?`).run(newRecipientBalance, targetId);
             const recipientRole = targetTable.slice(0, -1).toUpperCase();
-            const recipientDesc = type === 'credit' ? `Deposit from ${callerId || 'Admin'}` : `Withdrawal to ${callerId || 'Admin'}`;
+            
+            const recipientDesc = type === 'credit' ? `Received from ${callerId || 'System'}` : `Sent to ${callerId || 'System'}`;
             addLedgerEntry(targetId, recipientRole, recipientDesc, type === 'debit' ? amount : 0, type === 'credit' ? amount : 0, newRecipientBalance);
+
             if (callerId) {
                 let sourceTable = ''; let sourceRole = '';
                 if (targetTable === 'dealers') { sourceTable = 'admins'; sourceRole = 'ADMIN'; } 
                 else if (targetTable === 'users') { sourceTable = 'dealers'; sourceRole = 'DEALER'; }
+                
                 if (sourceTable) {
                     const source = findAccountById(callerId, sourceTable, 0);
                     if (source) {
@@ -305,13 +340,17 @@ module.exports = {
         addLedgerEntry(u.id, 'USER', 'Initial Deposit', 0, u.wallet, u.wallet);
     },
     updateUser: (id, u) => {
+        const current = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+        if (!current) throw new Error("User not found");
         db.prepare('UPDATE users SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ?, betLimits = ? WHERE id = ?').run(
-            u.name, u.password, u.area, u.contact, u.commissionRate, JSON.stringify(u.prizeRates), JSON.stringify(u.betLimits), id
+            u.name || current.name, u.password || current.password, u.area || current.area, u.contact || current.contact, u.commissionRate !== undefined ? u.commissionRate : current.commissionRate, u.prizeRates ? JSON.stringify(u.prizeRates) : current.prizeRates, u.betLimits ? JSON.stringify(u.betLimits) : current.betLimits, id
         );
     },
     updateDealer: (id, d) => {
+        const current = db.prepare('SELECT * FROM dealers WHERE id = ?').get(id);
+        if (!current) throw new Error("Dealer not found");
         db.prepare('UPDATE dealers SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ? WHERE id = ?').run(
-            d.name, d.password, d.area, d.contact, d.commissionRate, JSON.stringify(d.prizeRates), id
+            d.name || current.name, d.password || current.password, d.area || current.area, d.contact || current.contact, d.commissionRate !== undefined ? d.commissionRate : current.commissionRate, d.prizeRates ? JSON.stringify(d.prizeRates) : current.prizeRates, id
         );
     },
     declareWinner: (gameId, num) => db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(num, gameId),
@@ -337,6 +376,7 @@ module.exports = {
     },
     toggleRestriction: (id, table) => {
         const acc = db.prepare(`SELECT isRestricted FROM ${table} WHERE id = ?`).get(id);
+        if (!acc) return;
         db.prepare(`UPDATE ${table} SET isRestricted = ? WHERE id = ?`).run(acc.isRestricted ? 0 : 1, id)
     },
     deleteUser: (id) => db.prepare('DELETE FROM users WHERE id = ?').run(id)
