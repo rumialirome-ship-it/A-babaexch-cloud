@@ -685,6 +685,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
   const [dealerSearchQuery, setDealerSearchQuery] = useState('');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -712,6 +713,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                (d.area || '').toLowerCase().includes(query);
     });
   }, [dealers, dealerSearchQuery]);
+
+  const filteredUsers = useMemo(() => {
+    return (users || []).filter(u => {
+        const query = userSearchQuery.toLowerCase();
+        return (u.name || '').toLowerCase().includes(query) || 
+               (u.id || '').toLowerCase().includes(query) || 
+               (u.area || '').toLowerCase().includes(query) ||
+               (u.dealerId || '').toLowerCase().includes(query);
+    });
+  }, [users, userSearchQuery]);
 
   const activeLedgerAccount = useMemo(() => {
     if (!viewingLedgerId) return null;
@@ -759,7 +770,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
                     <input 
                         type="text" 
-                        placeholder="Search dealers by ID, Name or Area..." 
+                        placeholder="Search dealers..." 
                         value={dealerSearchQuery} 
                         onChange={(e) => setDealerSearchQuery(e.target.value)} 
                         className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-red-500 h-10" 
@@ -825,21 +836,34 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'users' && (
         <div className="animate-fade-in space-y-4">
-            <h3 className="text-xl font-black text-white uppercase tracking-widest">Global User Directory</h3>
-            <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">Global User Directory</h3>
+                <div className="relative flex-grow sm:w-64">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
+                    <input 
+                        type="text" 
+                        placeholder="Search users by Name, ID, Area or Dealer..." 
+                        value={userSearchQuery} 
+                        onChange={(e) => setUserSearchQuery(e.target.value)} 
+                        className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-cyan-500 h-10" 
+                    />
+                </div>
+            </div>
+            <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[900px]">
                         <thead className="bg-slate-800/80 border-b border-slate-700">
                             <tr className="text-[10px] text-slate-500 uppercase font-black tracking-widest">
                                 <th className="p-4">User</th>
                                 <th className="p-4">Parent Dealer</th>
+                                <th className="p-4">Area</th>
                                 <th className="p-4 text-right">Balance</th>
                                 <th className="p-4 text-center">Restriction</th>
                                 <th className="p-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {users.map(user => (
+                            {filteredUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-slate-700/20 transition-all">
                                     <td className="p-4">
                                         <div className="text-white font-bold text-sm">{user.name}</div>
@@ -847,6 +871,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     </td>
                                     <td className="p-4">
                                         <div className="text-cyan-400 font-mono text-xs">{user.dealerId}</div>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="text-slate-400 text-xs uppercase font-bold">{user.area || 'N/A'}</div>
                                     </td>
                                     <td className="p-4 text-right font-mono text-white text-xs">Rs {user.wallet.toLocaleString()}</td>
                                     <td className="p-4 text-center">
@@ -859,6 +886,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     </td>
                                 </tr>
                             ))}
+                            {filteredUsers.length === 0 && (
+                                <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-bold uppercase text-xs tracking-widest">No Users Found {userSearchQuery && `Matching "${userSearchQuery}"`}</td></tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

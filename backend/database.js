@@ -190,6 +190,8 @@ module.exports = {
 
             const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(user.dealerId);
             if (!dealer) throw new Error("Parent Dealer not found");
+            
+            const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
 
             let totalStake = 0;
             const gamesToBet = [];
@@ -214,9 +216,10 @@ module.exports = {
             if (totalStake <= 0) throw new Error("No valid bets found or markets closed.");
             if (user.wallet < totalStake) throw new Error("Insufficient Balance");
 
-            // 1. Calculate Commissions
+            // 1. Calculate Commissions & House Share
             const userComm = totalStake * (user.commissionRate / 100);
             const dealerComm = totalStake * (dealer.commissionRate / 100);
+            const houseShare = totalStake - userComm - dealerComm;
 
             // 2. Update User Wallet (Deduct Stake + Add Commission)
             const newUserBalance = user.wallet - totalStake + userComm;
@@ -225,8 +228,12 @@ module.exports = {
             // 3. Update Dealer Wallet (Add Commission)
             const newDealerBalance = dealer.wallet + dealerComm;
             db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(newDealerBalance, dealer.id);
+            
+            // 4. Update Admin Wallet (Add House Share Revenue)
+            const newAdminBalance = admin.wallet + houseShare;
+            db.prepare('UPDATE admins SET wallet = ? WHERE id = ?').run(newAdminBalance, admin.id);
 
-            // 4. Record Bets
+            // 5. Record Bets
             gamesToBet.forEach(task => {
                 task.groups.forEach(g => {
                     db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -235,14 +242,15 @@ module.exports = {
                 });
             });
 
-            // 5. Ledger Logging
+            // 6. Ledger Logging
             const gameNames = gamesToBet.map(g => g.name).join(', ');
-            // User: Bet Debit
+            // User: Bet Debit & Comm Credit
             addLedgerEntry(userId, 'USER', `Bet on: ${gameNames}`, totalStake, 0, user.wallet - totalStake);
-            // User: Commission Credit
             addLedgerEntry(userId, 'USER', `Commission Cashback: ${gameNames}`, 0, userComm, newUserBalance);
             // Dealer: Commission Credit
             addLedgerEntry(dealer.id, 'DEALER', `Commission from ${userId}: ${gameNames}`, 0, dealerComm, newDealerBalance);
+            // Admin: Revenue Credit
+            addLedgerEntry(admin.id, 'ADMIN', `House Revenue from ${userId}: ${gameNames}`, 0, houseShare, newAdminBalance);
 
             return { success: true, newBalance: newUserBalance };
         })();
@@ -358,18 +366,32 @@ module.exports = {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
             if (!game || !game.winningNumber || game.payoutsApproved) return { success: false, message: "Invalid game state" };
+            
+            const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
             const winningNumber = game.winningNumber;
             const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId);
+            
+            let totalGamePayout = 0;
+
             bets.forEach(bet => {
                 const user = db.prepare('SELECT * FROM users WHERE id = ?').get(bet.userId);
                 if (!user) return;
                 const payout = calculatePayout(bet, winningNumber, game.name, user.prizeRates);
                 if (payout > 0) {
+                    totalGamePayout += payout;
                     const newBalance = user.wallet + payout;
                     db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(newBalance, user.id);
                     addLedgerEntry(user.id, 'USER', `WIN: ${game.name} (${winningNumber}) - ${bet.subGameType}`, 0, payout, newBalance);
                 }
             });
+
+            // Update Admin Wallet (Deduct Total Payouts)
+            if (totalGamePayout > 0) {
+                const newAdminBalance = admin.wallet - totalGamePayout;
+                db.prepare('UPDATE admins SET wallet = ? WHERE id = ?').run(newAdminBalance, admin.id);
+                addLedgerEntry(admin.id, 'ADMIN', `Total Payout Expense: ${game.name} (${winningNumber})`, totalGamePayout, 0, newAdminBalance);
+            }
+
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
             return { success: true };
         })();
