@@ -59,76 +59,97 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
     );
 };
 
-const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
-    <div className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-inner">
-        <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
-            <table className="w-full text-left min-w-[700px]">
-                <thead className="bg-slate-900/80 sticky top-0 backdrop-blur-md z-10">
-                    <tr className="border-b border-slate-800">
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Timestamp / ID</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Classification</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Narrative</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Debit (-)</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Credit (+)</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Portfolio Balance</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-900">
-                    {Array.isArray(entries) && [...entries].sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime()).map(entry => {
-                        const isCredit = entry.credit > 0;
-                        const isDebit = entry.debit > 0;
-                        
-                        return (
-                            <tr key={entry.id} className="hover:bg-cyan-500/5 transition-all group">
-                                <td className="p-4 whitespace-nowrap">
-                                    <div className="text-[11px] font-bold text-slate-300">{entry.timestamp?.toLocaleDateString()}</div>
-                                    <div className="text-[9px] font-mono text-slate-600 uppercase">{entry.timestamp?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                </td>
-                                <td className="p-4">
-                                    {isCredit ? (
-                                        <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-emerald-500/20">CREDIT</span>
-                                    ) : isDebit ? (
-                                        <span className="bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-rose-500/20">DEBIT</span>
-                                    ) : (
-                                        <span className="bg-slate-800 text-slate-500 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-slate-700">ADJUST</span>
-                                    )}
-                                </td>
-                                <td className="p-4">
-                                    <div className="text-xs text-white font-medium group-hover:text-cyan-400 transition-colors">{entry.description}</div>
-                                </td>
-                                <td className={`p-4 text-right font-mono text-sm ${isDebit ? 'text-rose-400 font-bold' : 'text-slate-700'}`}>
-                                    {isDebit ? `-${entry.debit.toFixed(2)}` : '0.00'}
-                                </td>
-                                <td className={`p-4 text-right font-mono text-sm ${isCredit ? 'text-emerald-400 font-bold' : 'text-slate-700'}`}>
-                                    {isCredit ? `+${entry.credit.toFixed(2)}` : '0.00'}
-                                </td>
-                                <td className="p-4 text-right whitespace-nowrap">
-                                    <div className="text-xs font-black text-white font-mono bg-slate-900/50 px-3 py-1 rounded-lg inline-block border border-slate-800 group-hover:border-cyan-500/30">
-                                        PKR {entry.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}
+const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
+    const sortedEntries = useMemo(() => {
+        if (!Array.isArray(entries)) return [];
+        return [...entries].sort((a, b) => {
+            const dateA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+            const dateB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+            return dateB - dateA;
+        });
+    }, [entries]);
+
+    const formatTimestamp = (ts: any) => {
+        const d = ts instanceof Date ? ts : new Date(ts);
+        if (isNaN(d.getTime())) return { date: 'Invalid', time: 'Date' };
+        return {
+            date: d.toLocaleDateString(),
+            time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+    };
+
+    return (
+        <div className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+            <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
+                <table className="w-full text-left min-w-[700px]">
+                    <thead className="bg-slate-900/80 sticky top-0 backdrop-blur-md z-10">
+                        <tr className="border-b border-slate-800">
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Timestamp / ID</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Classification</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Narrative</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Debit (-)</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Credit (+)</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Portfolio Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900">
+                        {sortedEntries.map(entry => {
+                            const isCredit = entry.credit > 0;
+                            const isDebit = entry.debit > 0;
+                            const ts = formatTimestamp(entry.timestamp);
+                            
+                            return (
+                                <tr key={entry.id} className="hover:bg-cyan-500/5 transition-all group">
+                                    <td className="p-4 whitespace-nowrap">
+                                        <div className="text-[11px] font-bold text-slate-300">{ts.date}</div>
+                                        <div className="text-[9px] font-mono text-slate-600 uppercase">{ts.time}</div>
+                                    </td>
+                                    <td className="p-4">
+                                        {isCredit ? (
+                                            <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-emerald-500/20">CREDIT</span>
+                                        ) : isDebit ? (
+                                            <span className="bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-rose-500/20">DEBIT</span>
+                                        ) : (
+                                            <span className="bg-slate-800 text-slate-500 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-slate-700">ADJUST</span>
+                                        )}
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="text-xs text-white font-medium group-hover:text-cyan-400 transition-colors">{entry.description}</div>
+                                    </td>
+                                    <td className={`p-4 text-right font-mono text-sm ${isDebit ? 'text-rose-400 font-bold' : 'text-slate-700'}`}>
+                                        {isDebit ? `-${entry.debit.toFixed(2)}` : '0.00'}
+                                    </td>
+                                    <td className={`p-4 text-right font-mono text-sm ${isCredit ? 'text-emerald-400 font-bold' : 'text-slate-700'}`}>
+                                        {isCredit ? `+${entry.credit.toFixed(2)}` : '0.00'}
+                                    </td>
+                                    <td className="p-4 text-right whitespace-nowrap">
+                                        <div className="text-xs font-black text-white font-mono bg-slate-900/50 px-3 py-1 rounded-lg inline-block border border-slate-800 group-hover:border-cyan-500/30">
+                                            PKR {entry.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {sortedEntries.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="p-20 text-center">
+                                    <div className="flex flex-col items-center gap-4 opacity-40">
+                                        <div className="w-12 h-12 border-2 border-dashed border-slate-600 rounded-full flex items-center justify-center">{Icons.bookOpen}</div>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Zero Ledger Footprint Found</p>
                                     </div>
                                 </td>
                             </tr>
-                        );
-                    })}
-                     {(!Array.isArray(entries) || entries.length === 0) && (
-                        <tr>
-                            <td colSpan={6} className="p-20 text-center">
-                                <div className="flex flex-col items-center gap-4 opacity-40">
-                                    <div className="w-12 h-12 border-2 border-dashed border-slate-600 rounded-full flex items-center justify-center">{Icons.bookOpen}</div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Zero Ledger Footprint Found</p>
-                                </div>
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <div className="bg-slate-900/50 p-4 border-t border-slate-800 flex justify-between items-center">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Digital Audit Trail • Verified Node</span>
+                <span className="text-[9px] font-bold text-cyan-500 uppercase tracking-widest">{sortedEntries.length} Transactions Logged</span>
+            </div>
         </div>
-        <div className="bg-slate-900/50 p-4 border-t border-slate-800 flex justify-between items-center">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Digital Audit Trail • Verified Node</span>
-            <span className="text-[9px] font-bold text-cyan-500 uppercase tracking-widest">{entries.length} Transactions Logged</span>
-        </div>
-    </div>
-);
+    );
+};
 
 // --- FORMS ---
 
@@ -751,10 +772,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeTab === 'ledger' && (
         <div className="animate-fade-in space-y-4">
              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">Master Vault Audit</h3>
+                <div className="flex flex-col">
+                    <h3 className="text-xl font-black text-white uppercase tracking-widest">Master Vault Audit</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Tracking Live Guru Revenue & Expenses</p>
+                </div>
                 <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
                     <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest block mb-0.5">Guru Balance</span>
-                    <span className="text-emerald-400 font-mono font-black">PKR {admin.wallet.toLocaleString()}</span>
+                    <span className="text-emerald-400 font-mono font-black">PKR {(admin.wallet || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
             </div>
             <LedgerTable entries={admin.ledger || []} />
@@ -765,18 +789,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="animate-fade-in space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Dealer Network</h3>
-            <div className="flex gap-2">
-                <div className="relative flex-grow sm:w-64">
+            <div className="flex flex-wrap gap-2">
+                <div className="relative flex-grow min-w-[200px] sm:w-64">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
                     <input 
                         type="text" 
                         placeholder="Search dealers..." 
                         value={dealerSearchQuery} 
                         onChange={(e) => setDealerSearchQuery(e.target.value)} 
-                        className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-red-500 h-10" 
+                        className="bg-slate-800 p-2 pl-10 pr-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-red-500 h-10 transition-all" 
                     />
+                    {dealerSearchQuery && (
+                        <button 
+                            onClick={() => setDealerSearchQuery('')}
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-white transition-colors"
+                        >
+                            {Icons.close}
+                        </button>
+                    )}
                 </div>
-                <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700 h-10">Add Dealer</button>
+                <button 
+                    onClick={() => {}} // Optional: Can trigger manual fetch if needed, but useMemo is real-time
+                    className="bg-slate-700 hover:bg-slate-600 text-white px-5 rounded-lg text-[10px] font-black uppercase tracking-widest h-10 transition-all active:scale-95 shadow-lg flex items-center gap-2"
+                >
+                    {Icons.search} Search
+                </button>
+                <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-6 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700 h-10">Add Dealer</button>
             </div>
           </div>
           <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm shadow-2xl">
