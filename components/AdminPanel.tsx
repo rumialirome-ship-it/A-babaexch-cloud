@@ -61,7 +61,7 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
 
 const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
     const sortedEntries = useMemo(() => {
-        if (!Array.isArray(entries)) return [];
+        if (!entries || !Array.isArray(entries)) return [];
         return [...entries].sort((a, b) => {
             const dateA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
             const dateB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
@@ -705,8 +705,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingLedgerType, setViewingLedgerType] = useState<'dealer' | 'admin' | null>(null);
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
+  
+  // Search State
   const [dealerSearchQuery, setDealerSearchQuery] = useState('');
+  const [dealerAppliedSearch, setDealerAppliedSearch] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [isSearchingDealers, setIsSearchingDealers] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -726,18 +730,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: 'winners', label: 'Winners', icon: Icons.star },
   ];
 
+  const handleDealerSearchAction = () => {
+    setIsSearchingDealers(true);
+    setDealerAppliedSearch(dealerSearchQuery);
+    setTimeout(() => setIsSearchingDealers(false), 300);
+  };
+
   const filteredDealers = useMemo(() => {
+    const query = dealerAppliedSearch.toLowerCase();
     return (dealers || []).filter(d => {
-        const query = dealerSearchQuery.toLowerCase();
         return (d.name || '').toLowerCase().includes(query) || 
                (d.id || '').toLowerCase().includes(query) || 
                (d.area || '').toLowerCase().includes(query);
     });
-  }, [dealers, dealerSearchQuery]);
+  }, [dealers, dealerAppliedSearch]);
 
   const filteredUsers = useMemo(() => {
+    const query = userSearchQuery.toLowerCase();
     return (users || []).filter(u => {
-        const query = userSearchQuery.toLowerCase();
         return (u.name || '').toLowerCase().includes(query) || 
                (u.id || '').toLowerCase().includes(query) || 
                (u.area || '').toLowerCase().includes(query) ||
@@ -776,9 +786,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <h3 className="text-xl font-black text-white uppercase tracking-widest">Master Vault Audit</h3>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Tracking Live Guru Revenue & Expenses</p>
                 </div>
-                <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
-                    <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest block mb-0.5">Guru Balance</span>
-                    <span className="text-emerald-400 font-mono font-black">PKR {(admin.wallet || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <div className="flex items-center gap-4">
+                    <button 
+                      onClick={onRefreshData}
+                      className="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg border border-slate-700 transition-all active:scale-90"
+                      title="Sync Vault Data"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    </button>
+                    <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700">
+                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest block mb-0.5">Guru Balance</span>
+                        <span className="text-emerald-400 font-mono font-black">PKR {(admin.wallet || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
                 </div>
             </div>
             <LedgerTable entries={admin.ledger || []} />
@@ -790,18 +809,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
             <h3 className="text-xl font-black text-white uppercase tracking-widest">Dealer Network</h3>
             <div className="flex flex-wrap gap-2">
-                <div className="relative flex-grow min-w-[200px] sm:w-64">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
+                <div className="relative flex-grow min-w-[200px] sm:w-64 bg-slate-800/40 rounded-lg border border-slate-700 p-0.5 flex items-center">
+                    <span className="flex items-center pl-3 text-slate-400">{Icons.search}</span>
                     <input 
                         type="text" 
                         placeholder="Search dealers..." 
                         value={dealerSearchQuery} 
                         onChange={(e) => setDealerSearchQuery(e.target.value)} 
-                        className="bg-slate-800 p-2 pl-10 pr-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-red-500 h-10 transition-all" 
+                        onKeyDown={(e) => e.key === 'Enter' && handleDealerSearchAction()}
+                        className="bg-transparent p-2 pr-10 text-white w-full text-xs focus:ring-0 border-none h-10 transition-all" 
                     />
                     {dealerSearchQuery && (
                         <button 
-                            onClick={() => setDealerSearchQuery('')}
+                            onClick={() => { setDealerSearchQuery(''); setDealerAppliedSearch(''); }}
                             className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-white transition-colors"
                         >
                             {Icons.close}
@@ -809,12 +829,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
                 </div>
                 <button 
-                    onClick={() => {}} // Optional: Can trigger manual fetch if needed, but useMemo is real-time
-                    className="bg-slate-700 hover:bg-slate-600 text-white px-5 rounded-lg text-[10px] font-black uppercase tracking-widest h-10 transition-all active:scale-95 shadow-lg flex items-center gap-2"
+                    onClick={handleDealerSearchAction}
+                    disabled={isSearchingDealers}
+                    className="bg-slate-700 hover:bg-slate-600 text-white px-5 rounded-lg text-[10px] font-black uppercase tracking-widest h-11 transition-all active:scale-95 shadow-lg flex items-center gap-2 border border-slate-600 hover:border-cyan-500/50"
                 >
-                    {Icons.search} Search
+                    {isSearchingDealers ? (
+                      <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    ) : Icons.search} 
+                    Search
                 </button>
-                <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-6 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700 h-10">Add Dealer</button>
+                <button onClick={() => { setSelectedDealer(undefined); setIsDealerModalOpen(true); }} className="bg-red-600 hover:bg-red-500 text-white font-black py-2 px-6 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-red-900/20 transition-all active:scale-95 active:bg-red-700 h-11">Add Dealer</button>
             </div>
           </div>
           <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 backdrop-blur-sm shadow-2xl">
@@ -863,7 +887,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                              </tr>
                          ))}
                          {filteredDealers.length === 0 && (
-                            <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-bold uppercase text-xs tracking-widest">No Dealers Found {dealerSearchQuery && `Matching "${dealerSearchQuery}"`}</td></tr>
+                            <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-bold uppercase text-xs tracking-widest">No Dealers Found {dealerAppliedSearch && `Matching "${dealerAppliedSearch}"`}</td></tr>
                          )}
                      </tbody>
                  </table>
@@ -880,7 +904,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">{Icons.search}</span>
                     <input 
                         type="text" 
-                        placeholder="Search users by Name, ID, Area or Dealer..." 
+                        placeholder="Search users..." 
                         value={userSearchQuery} 
                         onChange={(e) => setUserSearchQuery(e.target.value)} 
                         className="bg-slate-800 p-2 pl-10 rounded-lg border border-slate-700 text-white w-full text-xs focus:ring-1 focus:ring-cyan-500 h-10" 
