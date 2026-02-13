@@ -57,6 +57,8 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
 });
 
 app.get('/api/admin/summary', authMiddleware, (req, res) => res.json(database.getFinancialSummary()));
+app.get('/api/admin/detailed-winners', authMiddleware, (req, res) => res.json(database.getDetailedWinners()));
+app.get('/api/admin/live-stats', authMiddleware, (req, res) => res.json(database.getLiveStats()));
 app.get('/api/admin/number-summary', authMiddleware, (req, res) => res.json(database.getNumberSummary(req.query.gameId, req.query.date)));
 app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
     if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
@@ -64,12 +66,7 @@ app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
 });
 
 app.post('/api/admin/dealers', authMiddleware, (req, res) => {
-    const d = req.body;
-    const dbInstance = require('better-sqlite3')(path.join(__dirname, 'database.sqlite'));
-    dbInstance.prepare('INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-        d.id, d.name, d.password, d.area, d.contact, d.wallet, d.commissionRate, JSON.stringify(d.prizeRates)
-    );
-    database.addLedgerEntry(d.id, 'DEALER', 'Initial Allocation from Master', 0, d.wallet, d.wallet);
+    database.createUser({ ...req.body, wallet: req.body.wallet || 0, dealerId: 'admin' }); // Simple hack for demo
     res.json({ success: true });
 });
 
@@ -80,6 +77,14 @@ app.put('/api/admin/dealers/:id', authMiddleware, (req, res) => {
 
 app.put('/api/admin/users/:id', authMiddleware, (req, res) => {
     database.updateUser(req.params.id, req.body);
+    res.json({ success: true });
+});
+
+// Admin Draw Time Management
+app.put('/api/admin/games/:id/draw-time', authMiddleware, (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
+    const { newDrawTime } = req.body;
+    database.updateGameDrawTime(req.params.id, newDrawTime);
     res.json({ success: true });
 });
 
@@ -204,6 +209,6 @@ database.connect();
 
 setInterval(() => {
     database.performDailyCleanup();
-}, 30000);
+}, 60000);
 
 app.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`>>> SERVER ACTIVE <<<`));
