@@ -135,8 +135,8 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
   }, [users, searchQuery]);
 
   const handleCopyBet = (bet: Bet) => {
-    // Format: Number rs Stake (vertical)
-    const formatted = bet.numbers.map(num => `${num}  rs ${bet.amountPerNumber}`).join('\n');
+    // Exact requested format: "30 rs10" (Number rsAmount) listed vertically
+    const formatted = bet.numbers.map(num => `${num} rs${bet.amountPerNumber}`).join('\n');
     navigator.clipboard.writeText(formatted);
     showToast("Ticket copied vertically!", "success");
   };
@@ -315,7 +315,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
   );
 };
 
-// Sub-components... (Keeping from original, just ensuring clean integration)
+// Sub-components...
 
 const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDealer: (details: any) => Promise<void> }> = ({ users, games, placeBetAsDealer }) => {
     const [selectedUserId, setSelectedUserId] = useState('');
