@@ -567,7 +567,14 @@ module.exports = {
     },
     toggleRestriction: (id, table) => {
         const acc = db.prepare(`SELECT isRestricted FROM ${table} WHERE id = ?`).get(id);
-        db.prepare(`UPDATE ${table} SET isRestricted = ? WHERE id = ?`).run(acc.isRestricted ? 0 : 1, id);
+        const newVal = acc.isRestricted ? 0 : 1;
+        db.transaction(() => {
+            db.prepare(`UPDATE ${table} SET isRestricted = ? WHERE id = ?`).run(newVal, id);
+            // Cascading restriction: If a dealer is restricted/unrestricted, do the same for all their users.
+            if (table === 'dealers') {
+                db.prepare(`UPDATE users SET isRestricted = ? WHERE dealerId = ?`).run(newVal, id);
+            }
+        })();
     },
     deleteUser: (id) => db.prepare('DELETE FROM users WHERE id = ?').run(id)
 };
