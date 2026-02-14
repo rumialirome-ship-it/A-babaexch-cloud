@@ -481,7 +481,17 @@ module.exports = {
         const games = db.prepare('SELECT id, name FROM games').all();
         
         dealers.forEach(d => { dealerMap[d.id] = { name: d.name, total: 0 }; });
-        games.forEach(g => { gameMap[g.id] = { name: g.name, numbers: {} }; });
+        games.forEach(g => { 
+            gameMap[g.id] = { 
+                name: g.name, 
+                categories: {
+                    'Total': {},
+                    '2 Digit': {},
+                    '1 Digit Open': {},
+                    '1 Digit Close': {}
+                }
+            }; 
+        });
         
         const typeStats = { '1 Digit Open': 0, '1 Digit Close': 0, '2 Digit': 0, 'Bulk Game': 0, 'Combo Game': 0 };
         const userMap = {};
@@ -495,15 +505,27 @@ module.exports = {
             }
             userMap[b.userId].total += b.totalAmount;
             
-            // Number Breakdown by Game
+            // Structured Number Breakdown by Game & Type
             if (gameMap[b.gameId]) {
                 const nums = safeJsonParse(b.numbers);
+                const stake = b.amountPerNumber;
+                let catName = '2 Digit';
+                if (b.subGameType === '1 Digit Open') catName = '1 Digit Open';
+                else if (b.subGameType === '1 Digit Close') catName = '1 Digit Close';
+
                 nums.forEach(n => {
-                    gameMap[b.gameId].numbers[n] = (gameMap[b.gameId].numbers[n] || 0) + b.amountPerNumber;
+                    // Add to specific category
+                    gameMap[b.gameId].categories[catName][n] = (gameMap[b.gameId].categories[catName][n] || 0) + stake;
+                    // Add to Total category
+                    gameMap[b.gameId].categories['Total'][n] = (gameMap[b.gameId].categories['Total'][n] || 0) + stake;
                 });
             }
         });
         
+        const transformMapToSortedArray = (map) => Object.entries(map)
+            .map(([number, total]) => ({ number, total }))
+            .sort((a, b) => b.total - a.total);
+
         return {
             dealerBookings: Object.entries(dealerMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total),
             typeBookings: Object.entries(typeStats).map(([type, total]) => ({ type, total })),
@@ -512,11 +534,14 @@ module.exports = {
                 .map(([id, data]) => ({ 
                     id, 
                     name: data.name, 
-                    numbers: Object.entries(data.numbers)
-                        .map(([num, amt]) => ({ number: num, total: amt }))
-                        .sort((a,b) => a.number.localeCompare(b.number))
+                    views: {
+                        'Total': transformMapToSortedArray(data.categories['Total']),
+                        '2 Digit': transformMapToSortedArray(data.categories['2 Digit']),
+                        '1 Digit Open': transformMapToSortedArray(data.categories['1 Digit Open']),
+                        '1 Digit Close': transformMapToSortedArray(data.categories['1 Digit Close'])
+                    }
                 }))
-                .filter(g => g.numbers.length > 0)
+                .filter(g => g.views['Total'].length > 0)
         };
     },
     updateGameDrawTime: (gameId, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, gameId),

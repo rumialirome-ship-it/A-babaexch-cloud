@@ -45,7 +45,7 @@ interface LiveStats {
     gameBreakdown: { 
         id: string, 
         name: string, 
-        numbers: { number: string, total: number }[] 
+        views: { [key: string]: { number: string, total: number }[] }
     }[];
 }
 
@@ -653,12 +653,24 @@ const LedgersView: React.FC<{
 const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [stats, setStats] = useState<LiveStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [gameViewFilters, setGameViewFilters] = useState<Record<string, string>>({});
 
     const loadLiveStats = async () => {
         setLoading(true);
         try {
             const res = await fetchWithAuth('/api/admin/live-stats');
-            if (res.ok) setStats(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+                // Initialize filters for new games if any
+                setGameViewFilters(prev => {
+                    const next = { ...prev };
+                    data.gameBreakdown.forEach((g: any) => {
+                        if (!next[g.id]) next[g.id] = 'Total';
+                    });
+                    return next;
+                });
+            }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     };
@@ -687,29 +699,50 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Live Bookings by Market</h4>
                     </div>
                     <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {stats.gameBreakdown.map(game => (
-                            <div key={game.id} className="bg-slate-900/50 rounded-2xl border border-slate-700 flex flex-col overflow-hidden">
-                                <div className="p-4 bg-slate-800/40 border-b border-slate-700 flex justify-between items-center">
-                                    <h5 className="text-white font-black uppercase text-sm">{game.name}</h5>
-                                    <button 
-                                        onClick={() => handleCopyGameBook(game.name, game.numbers)}
-                                        className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest bg-cyan-400/10 px-2 py-1 rounded transition-all active:scale-90"
-                                    >
-                                        Copy Book
-                                    </button>
-                                </div>
-                                <div className="p-4 overflow-y-auto max-h-[300px] no-scrollbar">
-                                    <div className="divide-y divide-slate-800">
-                                        {game.numbers.map((n, i) => (
-                                            <div key={i} className="py-2 flex justify-between items-center">
-                                                <div className="text-xl font-mono font-black text-white">{n.number}</div>
-                                                <div className="text-emerald-400 font-bold font-mono">Rs {n.total.toLocaleString()}</div>
-                                            </div>
-                                        ))}
+                        {stats.gameBreakdown.map(game => {
+                            const currentFilter = gameViewFilters[game.id] || 'Total';
+                            const filteredNumbers = game.views[currentFilter] || [];
+                            
+                            return (
+                                <div key={game.id} className="bg-slate-900/50 rounded-2xl border border-slate-700 flex flex-col overflow-hidden">
+                                    <div className="p-4 bg-slate-800/40 border-b border-slate-700 flex flex-col gap-3">
+                                        <div className="flex justify-between items-center">
+                                            <h5 className="text-white font-black uppercase text-sm">{game.name}</h5>
+                                            <button 
+                                                onClick={() => handleCopyGameBook(game.name, filteredNumbers)}
+                                                className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest bg-cyan-400/10 px-2 py-1 rounded transition-all active:scale-90"
+                                            >
+                                                Copy List
+                                            </button>
+                                        </div>
+                                        {/* Game Type Filter Dropdown */}
+                                        <select 
+                                            value={currentFilter}
+                                            onChange={(e) => setGameViewFilters(prev => ({ ...prev, [game.id]: e.target.value }))}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-[10px] font-black uppercase text-sky-400 focus:ring-1 focus:ring-sky-500"
+                                        >
+                                            <option value="Total">Total Book</option>
+                                            <option value="2 Digit">2 Digit Only</option>
+                                            <option value="1 Digit Open">1 Digit Open Only</option>
+                                            <option value="1 Digit Close">1 Digit Close Only</option>
+                                        </select>
+                                    </div>
+                                    <div className="p-4 overflow-y-auto max-h-[300px] no-scrollbar">
+                                        <div className="divide-y divide-slate-800">
+                                            {filteredNumbers.map((n, i) => (
+                                                <div key={i} className="py-2 flex justify-between items-center">
+                                                    <div className="text-xl font-mono font-black text-white">{n.number}</div>
+                                                    <div className="text-emerald-400 font-bold font-mono">Rs {n.total.toLocaleString()}</div>
+                                                </div>
+                                            ))}
+                                            {filteredNumbers.length === 0 && (
+                                                <div className="py-8 text-center text-slate-700 text-[10px] font-black uppercase italic">No {currentFilter} bookings</div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {stats.gameBreakdown.length === 0 && (
                             <div className="col-span-full py-12 text-center text-slate-600 font-black uppercase text-xs tracking-widest">No active bookings detected</div>
                         )}
@@ -849,8 +882,9 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-2xl font-black text-white font-mono">Rs {summary.totals.totalStake.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Dealer Comm. Burn</div>
-                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {summary.totals.totalDealerCommission.toLocaleString()}</div>
+                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Total Comm. Burn</div>
+                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {(summary.totals.totalDealerCommission + summary.totals.totalUserCommission).toLocaleString()}</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Dlr: {summary.totals.totalDealerCommission.toFixed(0)} | Usr: {summary.totals.totalUserCommission.toFixed(0)}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div className="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Total Payouts</div>
@@ -859,6 +893,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                 <div className="bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20">
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Volume - Payouts - Total Comm</div>
                 </div>
             </div>
 
