@@ -38,17 +38,6 @@ interface FinancialSummary {
   };
 }
 
-interface LiveStats {
-    dealerBookings: { id: string, name: string, total: number }[];
-    typeBookings: { type: string, total: number }[];
-    topPlayers: { id: string, name: string, total: number }[];
-    gameBreakdown: { 
-        id: string, 
-        name: string, 
-        views: { [key: string]: { number: string, total: number }[] }
-    }[];
-}
-
 interface NumberSummaryData {
     gameBreakdown: { name: string, total: number }[];
     twoDigit: { number: string, total: number }[];
@@ -258,11 +247,7 @@ const BettingSheetView: React.FC<{
     );
 };
 
-const NumberSummaryView: React.FC<{ 
-    games: Game[]; 
-    dealers: Dealer[];
-    fetchWithAuth: any;
-}> = ({ games, dealers, fetchWithAuth }) => {
+const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any }> = ({ games, dealers, fetchWithAuth }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [gameId, setGameId] = useState('');
     const [dealerId, setDealerId] = useState('');
@@ -285,107 +270,127 @@ const NumberSummaryView: React.FC<{
         finally { setLoading(false); }
     };
 
+    const handleCopy = (numbers: { number: string, total: number }[]) => {
+        const text = numbers.map(n => `${n.number} rs${n.total}`).join('\n');
+        navigator.clipboard.writeText(text);
+    };
+
+    const clearFilters = () => {
+        setDate(new Date().toISOString().split('T')[0]);
+        setGameId('');
+        setDealerId('');
+        setQuery('');
+    };
+
     useEffect(() => { loadData(); }, [date, gameId, dealerId, query]);
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-10 animate-fade-in">
+            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-wider">Number-wise Stake Summary</h2>
+
             {/* Filter Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</label>
+            <div className="bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-wrap gap-6 items-end">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Date</label>
                     <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold focus:ring-2 focus:ring-cyan-500" />
                 </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</label>
-                    <select value={gameId} onChange={e => setGameId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold uppercase focus:ring-2 focus:ring-cyan-500">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Game</label>
+                    <select value={gameId} onChange={e => setGameId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-black uppercase focus:ring-2 focus:ring-cyan-500">
                         <option value="">All Games</option>
                         {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                 </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer</label>
-                    <select value={dealerId} onChange={e => setDealerId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold uppercase focus:ring-2 focus:ring-cyan-500">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Dealer</label>
+                    <select value={dealerId} onChange={e => setDealerId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-black uppercase focus:ring-2 focus:ring-cyan-500">
                         <option value="">All Dealers</option>
                         {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                 </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Filter by Number</label>
-                    <input type="text" placeholder="e.g. 68" value={query} onChange={e => setQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold focus:ring-2 focus:ring-cyan-500" />
+                <div className="flex-1 min-w-[250px]">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Filter by Number</label>
+                    <input type="text" placeholder="e.g., ^5, 5$, 5" value={query} onChange={e => setQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold focus:ring-2 focus:ring-cyan-500" />
                 </div>
+                <button onClick={clearFilters} className="bg-slate-700 hover:bg-slate-600 text-white font-black px-8 py-2.5 rounded-xl text-xs uppercase tracking-widest transition-all h-[44px]">Clear Filters</button>
             </div>
 
             {loading ? (
-                <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs tracking-widest">Recalculating Ledger Summary...</div>
+                <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs tracking-widest">Querying Global Ledger...</div>
             ) : !data ? null : (
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-                    {/* Market Breakdown */}
-                    <div className="space-y-6">
-                        <h4 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
-                             Game Stake Breakdown
-                        </h4>
-                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl">
-                             <div className="divide-y divide-slate-800">
-                                {data.gameBreakdown.map(g => (
-                                    <div key={g.name} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors">
-                                        <div className="text-xs font-black text-slate-400 uppercase">{g.name}</div>
-                                        <div className="text-sm font-black text-white font-mono">Rs {g.total.toLocaleString()}</div>
-                                    </div>
-                                ))}
-                                {data.gameBreakdown.length === 0 && (
-                                    <div className="p-8 text-center text-slate-600 uppercase text-[10px] font-black">No volume</div>
-                                )}
-                             </div>
+                <div className="space-y-10">
+                    {/* Game Breakdown Row */}
+                    <div>
+                        <h3 className="text-xl font-black text-cyan-400 uppercase tracking-widest mb-6">GAME STAKE BREAKDOWN</h3>
+                        <div className="flex flex-wrap gap-4">
+                            {data.gameBreakdown.map(g => (
+                                <div key={g.name} className="bg-slate-800/60 p-4 rounded-xl border border-slate-700 min-w-[150px] text-center shadow-lg group hover:border-cyan-500/50 transition-all">
+                                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1 group-hover:text-cyan-400">{g.name}</div>
+                                    <div className="text-lg font-black text-white font-mono">Rs {g.total.toLocaleString()}</div>
+                                </div>
+                            ))}
+                            {data.gameBreakdown.length === 0 && (
+                                <div className="text-slate-600 uppercase font-black text-xs">No volume detected</div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Main Number Grid */}
-                    <div className="lg:col-span-3 space-y-10">
-                        {/* 2 Digit Section */}
-                        <div className="space-y-6">
-                            <h4 className="text-xl font-black text-sky-400 uppercase tracking-widest">2 Digit Stakes</h4>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {/* Three Column View */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+                        {/* 2 Digit */}
+                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
+                            <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
+                                <h4 className="text-lg font-black text-cyan-400 uppercase tracking-widest">2 Digit Stakes</h4>
+                                <button onClick={() => handleCopy(data.twoDigit)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
+                                    {Icons.clipboardList} Copy
+                                </button>
+                            </div>
+                            <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
                                 {data.twoDigit.map(item => (
-                                    <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center group hover:border-sky-500/50 transition-all shadow-lg">
-                                        <span className="text-2xl font-black text-white font-mono">{item.number}</span>
-                                        <span className="text-[11px] font-black text-sky-400 font-mono">Rs {item.total.toLocaleString()}</span>
+                                    <div key={item.number} className="flex justify-between items-center group">
+                                        <span className="text-3xl font-black text-cyan-300 font-mono tracking-tighter group-hover:scale-110 transition-transform">{item.number}</span>
+                                        <span className="text-lg font-black text-white font-mono">Rs {item.total.toLocaleString()}</span>
                                     </div>
                                 ))}
-                                {data.twoDigit.length === 0 && (
-                                    <div className="col-span-full py-12 text-center text-slate-600 uppercase text-xs font-black border border-dashed border-slate-700 rounded-2xl">No 2-digit bookings</div>
-                                )}
+                                {data.twoDigit.length === 0 && <div className="text-center text-slate-600 uppercase text-xs font-black py-10">Empty</div>}
                             </div>
                         </div>
 
-                        {/* 1 Digit Sections */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-6">
-                                <h4 className="text-xl font-black text-emerald-400 uppercase tracking-widest">1 Digit Open</h4>
-                                <div className="space-y-2">
-                                    {data.oneDigitOpen.map(item => (
-                                        <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center hover:border-emerald-500/50 transition-all shadow-lg">
-                                            <span className="text-2xl font-black text-white font-mono">{item.number}</span>
-                                            <span className="text-[11px] font-black text-emerald-400 font-mono">Rs {item.total.toLocaleString()}</span>
-                                        </div>
-                                    ))}
-                                    {data.oneDigitOpen.length === 0 && (
-                                        <div className="py-8 text-center text-slate-600 uppercase text-[10px] font-black">No Open bookings</div>
-                                    )}
-                                </div>
+                        {/* 1 Digit Open */}
+                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
+                            <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
+                                <h4 className="text-lg font-black text-amber-400 uppercase tracking-widest">1 Digit Open</h4>
+                                <button onClick={() => handleCopy(data.oneDigitOpen)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
+                                    {Icons.clipboardList} Copy
+                                </button>
                             </div>
-                            <div className="space-y-6">
-                                <h4 className="text-xl font-black text-rose-400 uppercase tracking-widest">1 Digit Close</h4>
-                                <div className="space-y-2">
-                                    {data.oneDigitClose.map(item => (
-                                        <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center hover:border-rose-500/50 transition-all shadow-lg">
-                                            <span className="text-2xl font-black text-white font-mono">{item.number}</span>
-                                            <span className="text-[11px] font-black text-rose-400 font-mono">Rs {item.total.toLocaleString()}</span>
-                                        </div>
-                                    ))}
-                                    {data.oneDigitClose.length === 0 && (
-                                        <div className="py-8 text-center text-slate-600 uppercase text-[10px] font-black">No Close bookings</div>
-                                    )}
-                                </div>
+                            <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
+                                {data.oneDigitOpen.map(item => (
+                                    <div key={item.number} className="flex justify-between items-center group">
+                                        <span className="text-3xl font-black text-amber-400 font-mono tracking-tighter group-hover:scale-110 transition-transform">{item.number}</span>
+                                        <span className="text-lg font-black text-white font-mono">Rs {item.total.toLocaleString()}</span>
+                                    </div>
+                                ))}
+                                {data.oneDigitOpen.length === 0 && <div className="text-center text-slate-600 uppercase text-xs font-black py-10">Empty</div>}
+                            </div>
+                        </div>
+
+                        {/* 1 Digit Close */}
+                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
+                            <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
+                                <h4 className="text-lg font-black text-rose-400 uppercase tracking-widest">1 Digit Close</h4>
+                                <button onClick={() => handleCopy(data.oneDigitClose)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
+                                    {Icons.clipboardList} Copy
+                                </button>
+                            </div>
+                            <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
+                                {data.oneDigitClose.map(item => (
+                                    <div key={item.number} className="flex justify-between items-center group">
+                                        <span className="text-3xl font-black text-rose-400 font-mono tracking-tighter group-hover:scale-110 transition-transform">{item.number}</span>
+                                        <span className="text-lg font-black text-white font-mono">Rs {item.total.toLocaleString()}</span>
+                                    </div>
+                                ))}
+                                {data.oneDigitClose.length === 0 && <div className="text-center text-slate-600 uppercase text-xs font-black py-10">Empty</div>}
                             </div>
                         </div>
                     </div>
@@ -393,6 +398,16 @@ const NumberSummaryView: React.FC<{
             )}
         </div>
     );
+};
+
+const NumberSummaryView: React.FC<{ 
+    games: Game[]; 
+    dealers: Dealer[];
+    fetchWithAuth: any;
+}> = ({ games, dealers, fetchWithAuth }) => {
+    // This component is now essentially the same as LiveView's content but perhaps with less frequent updates or specific historical focus.
+    // For consistency with the user's request, I will keep LiveView as the main destination for this design.
+    return <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} />;
 };
 
 const TransactionForm: React.FC<{
@@ -650,181 +665,6 @@ const LedgersView: React.FC<{
     );
 };
 
-const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
-    const [stats, setStats] = useState<LiveStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [gameViewFilters, setGameViewFilters] = useState<Record<string, string>>({});
-
-    const loadLiveStats = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchWithAuth('/api/admin/live-stats');
-            if (res.ok) {
-                const data = await res.json();
-                setStats(data);
-                // Initialize filters for new games if any
-                setGameViewFilters(prev => {
-                    const next = { ...prev };
-                    data.gameBreakdown.forEach((g: any) => {
-                        if (!next[g.id]) next[g.id] = 'Total';
-                    });
-                    return next;
-                });
-            }
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    };
-
-    const handleCopyGameBook = (gameName: string, numbers: { number: string, total: number }[]) => {
-        const formatted = numbers.map(n => `${n.number} rs${n.total}`).join('\n');
-        navigator.clipboard.writeText(formatted);
-    };
-
-    useEffect(() => { loadLiveStats(); }, []);
-
-    if (loading) return <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Syncing Live Stream...</div>;
-    if (!stats) return null;
-
-    return (
-        <div className="space-y-8 animate-fade-in">
-             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">Live Operations Monitor</h3>
-                <button onClick={loadLiveStats} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-sky-400 font-black text-[10px] uppercase transition-all border border-slate-700">Refresh Pulse</button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Market-wise Breakdown */}
-                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl lg:col-span-2">
-                    <div className="p-6 bg-slate-800/60 border-b border-slate-700">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Live Bookings by Market</h4>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {stats.gameBreakdown.map(game => {
-                            const currentFilter = gameViewFilters[game.id] || 'Total';
-                            const filteredNumbers = game.views[currentFilter] || [];
-                            
-                            return (
-                                <div key={game.id} className="bg-slate-900/50 rounded-2xl border border-slate-700 flex flex-col overflow-hidden">
-                                    <div className="p-4 bg-slate-800/40 border-b border-slate-700 flex flex-col gap-3">
-                                        <div className="flex justify-between items-center">
-                                            <h5 className="text-white font-black uppercase text-sm">{game.name}</h5>
-                                            <button 
-                                                onClick={() => handleCopyGameBook(game.name, filteredNumbers)}
-                                                className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest bg-cyan-400/10 px-2 py-1 rounded transition-all active:scale-90"
-                                            >
-                                                Copy List
-                                            </button>
-                                        </div>
-                                        {/* Game Type Filter Dropdown */}
-                                        <select 
-                                            value={currentFilter}
-                                            onChange={(e) => setGameViewFilters(prev => ({ ...prev, [game.id]: e.target.value }))}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-[10px] font-black uppercase text-sky-400 focus:ring-1 focus:ring-sky-500"
-                                        >
-                                            <option value="Total">Total Book</option>
-                                            <option value="2 Digit">2 Digit Only</option>
-                                            <option value="1 Digit Open">1 Digit Open Only</option>
-                                            <option value="1 Digit Close">1 Digit Close Only</option>
-                                        </select>
-                                    </div>
-                                    <div className="p-4 overflow-y-auto max-h-[300px] no-scrollbar">
-                                        <div className="divide-y divide-slate-800">
-                                            {filteredNumbers.map((n, i) => (
-                                                <div key={i} className="py-2 flex justify-between items-center">
-                                                    <div className="text-xl font-mono font-black text-white">{n.number}</div>
-                                                    <div className="text-emerald-400 font-bold font-mono">Rs {n.total.toLocaleString()}</div>
-                                                </div>
-                                            ))}
-                                            {filteredNumbers.length === 0 && (
-                                                <div className="py-8 text-center text-slate-700 text-[10px] font-black uppercase italic">No {currentFilter} bookings</div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        {stats.gameBreakdown.length === 0 && (
-                            <div className="col-span-full py-12 text-center text-slate-600 font-black uppercase text-xs tracking-widest">No active bookings detected</div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
-                    <div className="p-6 bg-slate-800/60 border-b border-slate-700">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Bookings by Dealer</h4>
-                    </div>
-                    <div className="p-4 overflow-y-auto max-h-[400px] no-scrollbar">
-                        <table className="w-full text-left">
-                            <thead className="border-b border-slate-700">
-                                <tr>
-                                    <th className="p-3 text-[10px] text-slate-500 uppercase tracking-widest">Dealer Name</th>
-                                    <th className="p-3 text-[10px] text-slate-500 uppercase tracking-widest text-right">Total Stake</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {stats.dealerBookings.map(d => (
-                                    <tr key={d.id} className="hover:bg-sky-500/5">
-                                        <td className="p-3">
-                                            <div className="text-white font-bold text-sm uppercase">{d.name}</div>
-                                            <div className="text-[10px] text-slate-500 font-mono">{d.id}</div>
-                                        </td>
-                                        <td className="p-3 text-right">
-                                            <div className="text-sky-400 font-black font-mono">Rs {d.total.toLocaleString()}</div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
-                    <div className="p-6 bg-slate-800/60 border-b border-slate-700">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Booking Type Breakdown</h4>
-                    </div>
-                    <div className="p-4 space-y-4">
-                        {stats.typeBookings.map(t => (
-                            <div key={t.type} className="flex justify-between items-center p-4 bg-slate-900/50 rounded-2xl border border-slate-700">
-                                <div className="text-white font-black uppercase text-xs tracking-wider">{t.type}</div>
-                                <div className="text-xl font-black text-emerald-400 font-mono">Rs {t.total.toLocaleString()}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl lg:col-span-2">
-                    <div className="p-6 bg-slate-800/60 border-b border-slate-700 flex justify-between items-center">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Top Players (By Stake)</h4>
-                    </div>
-                    <div className="p-4 overflow-x-auto no-scrollbar">
-                        <table className="w-full text-left">
-                            <thead className="border-b border-slate-700">
-                                <tr>
-                                    <th className="p-4 text-[10px] text-slate-500 uppercase tracking-widest">User Name</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Total Play (PKR)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {stats.topPlayers.map(p => (
-                                    <tr key={p.id} className="hover:bg-red-500/5 group transition-colors">
-                                        <td className="p-4">
-                                            <div className="text-white font-black text-sm uppercase">{p.name}</div>
-                                            <div className="text-[10px] text-slate-500 font-mono">{p.id}</div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="text-emerald-400 font-black font-mono text-lg">Rs {p.total.toLocaleString()}</div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 // --- FINANCIAL SUMMARY COMPONENT ---
 const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
@@ -894,16 +734,6 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
                     <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Volume - Payouts - Total Comm</div>
-                </div>
-            </div>
-
-            <div className="bg-slate-800/40 p-6 rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div>
-                        <h4 className="text-amber-400 font-black uppercase text-sm tracking-widest mb-1">Data Persistence Advisory</h4>
-                        <p className="text-[10px] text-slate-400 font-medium">To avoid losing newly created accounts after deployment, download the backup and replace your project's <code className="text-amber-200">db.json</code> with it before redeploying.</p>
-                    </div>
-                    <button onClick={handleDownloadBackup} className="shrink-0 px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Download db.json</button>
                 </div>
             </div>
 
@@ -1059,7 +889,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Stats' },
     { id: 'live', label: 'Live' },
-    { id: 'numbersummary', label: 'Summary' },
     { id: 'ledgers', label: 'Ledgers' },
     { id: 'bettingsheet', label: 'Sheet' },
     { id: 'games', label: 'Markets' },
@@ -1082,14 +911,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} />}
-      {activeTab === 'live' && <LiveView fetchWithAuth={fetchWithAuth} />}
-      {activeTab === 'numbersummary' && (
-          <NumberSummaryView 
-            games={games} 
-            dealers={dealers} 
-            fetchWithAuth={fetchWithAuth} 
-          />
-      )}
+      {activeTab === 'live' && <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'ledgers' && (
           <LedgersView 
             admin={admin} 
