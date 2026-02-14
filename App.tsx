@@ -213,7 +213,11 @@ const AppContent: React.FC = () => {
                                 withdrawFromDealerWallet={async (id, amt) => { await fetchWithAuth('/api/admin/withdraw/dealer', { method: 'POST', body: JSON.stringify({ dealerId: id, amount: amt }) }); fetchPrivateData(); }}
                                 toggleAccountRestriction={async (id, type) => { await fetchWithAuth(`/api/admin/accounts/${type}/${id}/toggle-restriction`, { method: 'PUT' }); fetchPrivateData(); }}
                                 onPlaceAdminBets={async (d) => { await fetchWithAuth('/api/admin/bulk-bet', { method: 'POST', body: JSON.stringify(d) }); fetchPrivateData(); }}
-                                updateGameDrawTime={async (id, time) => { await fetchWithAuth(`/api/admin/games/${id}/draw-time`, { method: 'PUT', body: JSON.stringify({ newDrawTime: time }) }); fetchPrivateData(); }}
+                                updateGameDrawTime={async (id, time) => { 
+                                    await fetchWithAuth(`/api/admin/games/${id}/draw-time`, { method: 'PUT', body: JSON.stringify({ newDrawTime: time }) }); 
+                                    await fetchPublicData();
+                                    fetchPrivateData(); 
+                                }}
                                 onRefreshData={fetchPrivateData} 
                             />
                         )}

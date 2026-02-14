@@ -1,8 +1,6 @@
 node_modules
 dist
 backend/node_modules
-*.sqlite
-*.sqlite-journal
 .git
 .gitignore
 .env

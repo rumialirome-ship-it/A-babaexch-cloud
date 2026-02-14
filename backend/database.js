@@ -133,6 +133,32 @@ const performDailyCleanup = () => {
 
 module.exports = {
     connect, findAccountById, performDailyCleanup,
+    exportDatabaseState: () => {
+        const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
+        if (admin) {
+            admin.prizeRates = safeJsonParse(admin.prizeRates);
+            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE accountId = ?').all(admin.id);
+        }
+        const dealers = db.prepare('SELECT * FROM dealers').all().map(d => ({
+            ...d,
+            prizeRates: safeJsonParse(d.prizeRates),
+            isRestricted: !!d.isRestricted,
+            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ?').all(d.id)
+        }));
+        const users = db.prepare('SELECT * FROM users').all().map(u => ({
+            ...u,
+            prizeRates: safeJsonParse(u.prizeRates),
+            betLimits: safeJsonParse(u.betLimits),
+            isRestricted: !!u.isRestricted,
+            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ?').all(u.id)
+        }));
+        const games = db.prepare('SELECT * FROM games').all();
+        const bets = db.prepare('SELECT * FROM bets').all().map(b => ({
+            ...b,
+            numbers: safeJsonParse(b.numbers)
+        }));
+        return { admin, dealers, users, games, bets };
+    },
     findAccountForLogin: (loginId) => {
         const tables = [{ n: 'users', r: 'USER' }, { n: 'dealers', r: 'DEALER' }, { n: 'admins', r: 'ADMIN' }];
         for (const t of tables) {

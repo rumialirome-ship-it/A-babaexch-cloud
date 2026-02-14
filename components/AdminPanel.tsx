@@ -91,7 +91,7 @@ const MarketCountdown: React.FC<{ drawTime: string }> = ({ drawTime }) => {
 
 const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
     <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
-        <div className="overflow-y-auto max-h-[60vh] no-scrollbar">
+        <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
             <table className="w-full text-left min-w-[600px]">
                 <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10">
                     <tr className="border-b border-slate-700">
@@ -579,7 +579,7 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                             <thead className="border-b border-slate-700">
                                 <tr>
                                     <th className="p-4 text-[10px] text-slate-500 uppercase tracking-widest">User Name</th>
-                                    <th className="p-4 text-[10px] text-slate-500 uppercase tracking-widest text-right">Total Play (PKR)</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Total Play (PKR)</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
@@ -603,6 +603,7 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     );
 };
 
+// --- FINANCIAL SUMMARY COMPONENT ---
 const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [loading, setLoading] = useState(true);
@@ -616,6 +617,26 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
         finally { setLoading(false); }
     };
 
+    const handleDownloadBackup = async () => {
+        try {
+            const res = await fetchWithAuth('/api/admin/export');
+            if (res.ok) {
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ababa_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
+        } catch (e) {
+            alert("Backup failed to download.");
+        }
+    };
+
     useEffect(() => { loadSummary(); }, []);
 
     if (loading) return <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Aggregating Ledger...</div>;
@@ -625,7 +646,12 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
         <div className="space-y-6 animate-fade-in">
              <div className="flex justify-between items-center">
                 <h3 className="text-xl font-black text-white uppercase tracking-widest">Financial Summary</h3>
-                <button onClick={loadSummary} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-emerald-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh</button>
+                <div className="flex gap-2">
+                    <button onClick={handleDownloadBackup} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-sky-400 font-black text-[10px] uppercase transition-all border border-slate-700 flex items-center gap-2">
+                        {Icons.clipboardList} Export System
+                    </button>
+                    <button onClick={loadSummary} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-emerald-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh</button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -644,6 +670,16 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                 <div className="bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20">
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
+                </div>
+            </div>
+
+            <div className="bg-slate-800/40 p-6 rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h4 className="text-amber-400 font-black uppercase text-sm tracking-widest mb-1">Data Persistence Advisory</h4>
+                        <p className="text-[10px] text-slate-400 font-medium">To avoid losing newly created accounts after deployment, download the backup and replace your project's <code className="text-amber-200">db.json</code> with it before redeploying.</p>
+                    </div>
+                    <button onClick={handleDownloadBackup} className="shrink-0 px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Download db.json</button>
                 </div>
             </div>
 
@@ -668,7 +704,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                                     <td className="p-4 text-right font-mono text-sky-400 text-xs">{game.userCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-emerald-400 text-xs">{game.dealerCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-rose-400 text-xs">{game.totalPayouts.toFixed(2)}</td>
-                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                         Rs {game.netProfit.toLocaleString()}
                                     </td>
                                 </tr>
@@ -758,8 +794,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingUserLedgerFor, setViewingUserLedgerFor] = useState<User | null>(null);
   const [isDealerModalOpen, setIsDealerModalOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | undefined>(undefined);
-  
-  // States for draw time management
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [tempTime, setTempTime] = useState<string>('');
 
@@ -793,7 +827,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       const formattedTime = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
       try {
           await updateGameDrawTime?.(gameId, formattedTime);
-          onRefreshData?.();
       } catch (e) {
           alert("Time update failed.");
       }
@@ -813,7 +846,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-3xl sm:text-5xl font-black text-red-500 uppercase tracking-tighter text-shadow-glow">Admin Ops</h2>
+        <h2 className="text-3xl sm:text-5xl font-black text-red-500 uppercase tracking-tighter shadow-glow">Admin Ops</h2>
         <div className="bg-slate-800/80 p-1 rounded-xl flex items-center space-x-1 border border-slate-700 w-full sm:w-auto overflow-x-auto no-scrollbar shadow-2xl">
             {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`shrink-0 py-2.5 px-6 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 ${activeTab === tab.id ? 'bg-red-600 text-white shadow-xl shadow-red-900/20' : 'text-slate-500 hover:text-white'}`}>
@@ -850,7 +883,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <h3 className="text-white font-black uppercase tracking-widest">Global Player Database</h3>
               </div>
               <div className="overflow-x-auto no-scrollbar">
-                  <table className="w-full text-left">
+                  <table className="w-full text-left min-w-[700px]">
                       <thead className="bg-slate-900/50 border-b border-slate-800">
                           <tr>
                               <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">User Identity</th>
@@ -888,7 +921,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
               <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
                   <div className="overflow-x-auto no-scrollbar">
-                      <table className="w-full text-left">
+                      <table className="w-full text-left min-w-[800px]">
                           <thead className="bg-slate-900/50 border-b border-slate-800">
                               <tr>
                                   <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer Identity</th>
@@ -932,14 +965,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 const isEditingResult = editingWinnerMap[game.id];
                 const isPendingResult = pendingDeclareMap[game.id];
                 const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
-                
                 const isEditingTime = editingTimeId === game.id;
 
                 return (
                     <div key={game.id} className="bg-slate-800/60 rounded-3xl border border-slate-700 shadow-2xl flex flex-col transition-all group backdrop-blur-md">
-                        {/* Real Time Countdown Header */}
                         <MarketCountdown drawTime={game.drawTime} />
-                        
                         <div className="p-6 space-y-6 flex-grow">
                             <div className="flex justify-between items-start">
                                 <div>
@@ -981,7 +1011,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
                             <div className="bg-slate-900/80 p-8 rounded-2xl border border-slate-700 flex flex-col items-center justify-center min-h-[160px] relative overflow-hidden group/box">
                                 <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-4">Official Result</label>
-                                
                                 {isPendingResult ? (
                                     <div className="text-cyan-400 font-black uppercase animate-pulse text-sm tracking-widest">Validating...</div>
                                 ) : winningNumber && !isEditingResult ? (
