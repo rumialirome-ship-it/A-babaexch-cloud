@@ -509,7 +509,7 @@ const DealerForm: React.FC<{ dealer?: Dealer, onSave: (d: any, o?: string) => Pr
                         <input type="number" value={prizeRates.oneDigitOpen} onChange={e => setPrizeRates({...prizeRates, oneDigitOpen: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
                     </div>
                     <div>
-                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Close</label>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit Close</label>
                         <input type="number" value={prizeRates.oneDigitClose} onChange={e => setPrizeRates({...prizeRates, oneDigitClose: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
                     </div>
                     <div>
@@ -666,7 +666,6 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const handleCopyGameBook = (gameName: string, numbers: { number: string, total: number }[]) => {
         const formatted = numbers.map(n => `${n.number} rs${n.total}`).join('\n');
         navigator.clipboard.writeText(formatted);
-        alert(`Book for ${gameName} copied vertically!`);
     };
 
     useEffect(() => { loadLiveStats(); }, []);
@@ -850,8 +849,8 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-2xl font-black text-white font-mono">Rs {summary.totals.totalStake.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Commission Burn</div>
-                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {(summary.totals.totalUserCommission + summary.totals.totalDealerCommission).toLocaleString()}</div>
+                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Dealer Comm. Burn</div>
+                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {summary.totals.totalDealerCommission.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div className="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Total Payouts</div>
@@ -894,7 +893,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                                     <td className="p-4 text-right font-mono text-sky-400 text-xs">{game.userCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-emerald-400 text-xs">{game.dealerCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-rose-400 text-xs">{game.totalPayouts.toFixed(2)}</td>
-                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                         Rs {game.netProfit.toLocaleString()}
                                     </td>
                                 </tr>
