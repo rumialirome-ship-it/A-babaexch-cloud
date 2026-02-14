@@ -260,6 +260,8 @@ module.exports = {
         return db.transaction(() => {
             const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
             if (!user) throw new Error('User not found');
+            const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(user.dealerId);
+            if (!dealer) throw new Error('Dealer not found');
             
             const processBet = (gameId, betGroups) => {
                 const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
@@ -272,6 +274,35 @@ module.exports = {
                 const currentBalance = db.prepare('SELECT wallet FROM users WHERE id = ?').get(userId).wallet;
                 if (currentBalance < totalCost) throw new Error('Insufficient wallet balance');
 
+                // 1. Deduct Bet Amount from User
+                const afterBetBalance = currentBalance - totalCost;
+                db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(afterBetBalance, userId);
+                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    uuidv4(), userId, 'USER', new Date().toISOString(), `Bet placed on ${game.name}`, totalCost, 0, afterBetBalance
+                );
+
+                // 2. Add User Commission (Cashback)
+                const userComm = totalCost * (user.commissionRate / 100);
+                if (userComm > 0) {
+                    const afterCommBalance = afterBetBalance + userComm;
+                    db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(afterCommBalance, userId);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                        uuidv4(), userId, 'USER', new Date().toISOString(), `Comm. on ${game.name} Stake`, 0, userComm, afterCommBalance
+                    );
+                }
+
+                // 3. Add Dealer Commission
+                const dealerComm = totalCost * (dealer.commissionRate / 100);
+                if (dealerComm > 0) {
+                    const currentDealerWallet = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(dealer.id).wallet;
+                    const afterDealerBalance = currentDealerWallet + dealerComm;
+                    db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(afterDealerBalance, dealer.id);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                        uuidv4(), dealer.id, 'DEALER', new Date().toISOString(), `Booking Comm. [User: ${user.name}] [Game: ${game.name}]`, 0, dealerComm, afterDealerBalance
+                    );
+                }
+
+                // 4. Record Bets
                 betGroups.forEach(bg => {
                     db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -279,12 +310,6 @@ module.exports = {
                         bg.amountPerNumber, bg.numbers.length * bg.amountPerNumber, new Date().toISOString()
                     );
                 });
-
-                const finalBalance = currentBalance - totalCost;
-                db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(finalBalance, userId);
-                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), userId, 'USER', new Date().toISOString(), `Bet placed on ${game.name}`, totalCost, 0, finalBalance
-                );
             };
 
             if (data.isMultiGame) {

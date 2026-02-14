@@ -758,6 +758,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [viewingUserLedgerFor, setViewingUserLedgerFor] = useState<User | null>(null);
   const [isDealerModalOpen, setIsDealerModalOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | undefined>(undefined);
+  
+  // States for draw time management
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [tempTime, setTempTime] = useState<string>('');
+
   const { fetchWithAuth } = useAuth();
 
   const handleDeclareAction = async (gameId: string, isUpdate: boolean) => {
@@ -924,10 +929,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeTab === 'games' && (
         <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {games.map(game => {
-                const isEditing = editingWinnerMap[game.id];
-                const isPending = pendingDeclareMap[game.id];
+                const isEditingResult = editingWinnerMap[game.id];
+                const isPendingResult = pendingDeclareMap[game.id];
                 const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
                 
+                const isEditingTime = editingTimeId === game.id;
+
                 return (
                     <div key={game.id} className="bg-slate-800/60 rounded-3xl border border-slate-700 shadow-2xl flex flex-col transition-all group backdrop-blur-md">
                         {/* Real Time Countdown Header */}
@@ -938,12 +945,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <div>
                                     <h4 className="text-white font-black uppercase text-xl tracking-tight">{game.name}</h4>
                                     <div className="flex items-center gap-3 mt-2">
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-900 px-2 py-1 rounded">Draw: {game.drawTime}</div>
-                                        <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-700 shadow-inner">
-                                            <button onClick={() => adjustDrawTime(game.id, game.drawTime, -5)} className="px-2 py-1 text-slate-500 hover:text-rose-400 transition-colors active:scale-75">{Icons.minus}</button>
-                                            <span className="w-px h-3 bg-slate-700 mx-0.5"></span>
-                                            <button onClick={() => adjustDrawTime(game.id, game.drawTime, 5)} className="px-2 py-1 text-slate-500 hover:text-emerald-400 transition-colors active:scale-75">{Icons.plus}</button>
-                                        </div>
+                                        {isEditingTime ? (
+                                            <div className="flex items-center gap-2 animate-fade-in bg-slate-900 px-2 py-1 rounded border border-cyan-500/30">
+                                                <input 
+                                                    type="time" 
+                                                    autoFocus
+                                                    value={tempTime} 
+                                                    onChange={(e) => setTempTime(e.target.value)}
+                                                    className="bg-transparent border-none text-[10px] text-white font-bold focus:ring-0 p-0 w-20"
+                                                />
+                                                <button onClick={async () => { await updateGameDrawTime?.(game.id, tempTime); setEditingTimeId(null); }} className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black">✓</button>
+                                                <button onClick={() => setEditingTimeId(null)} className="text-rose-400 hover:text-rose-300 text-[10px] font-black">✕</button>
+                                            </div>
+                                        ) : (
+                                            <div 
+                                                onClick={() => { setEditingTimeId(game.id); setTempTime(game.drawTime); }}
+                                                className="group/time cursor-pointer flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-900 px-2 py-1 rounded border border-transparent hover:border-cyan-500/30 transition-all"
+                                                title="Click to edit draw time"
+                                            >
+                                                <span>Draw: {game.drawTime}</span>
+                                                <span className="opacity-0 group-hover/time:opacity-100 text-[8px] text-cyan-500">Edit</span>
+                                            </div>
+                                        )}
+                                        
+                                        {!isEditingTime && (
+                                            <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-700 shadow-inner">
+                                                <button onClick={() => adjustDrawTime(game.id, game.drawTime, -5)} className="px-2 py-1 text-slate-500 hover:text-rose-400 transition-colors active:scale-75">{Icons.minus}</button>
+                                                <span className="w-px h-3 bg-slate-700 mx-0.5"></span>
+                                                <button onClick={() => adjustDrawTime(game.id, game.drawTime, 5)} className="px-2 py-1 text-slate-500 hover:text-emerald-400 transition-colors active:scale-75">{Icons.plus}</button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -951,9 +982,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             <div className="bg-slate-900/80 p-8 rounded-2xl border border-slate-700 flex flex-col items-center justify-center min-h-[160px] relative overflow-hidden group/box">
                                 <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-4">Official Result</label>
                                 
-                                {isPending ? (
+                                {isPendingResult ? (
                                     <div className="text-cyan-400 font-black uppercase animate-pulse text-sm tracking-widest">Validating...</div>
-                                ) : winningNumber && !isEditing ? (
+                                ) : winningNumber && !isEditingResult ? (
                                     <div className="cursor-pointer text-center group" onClick={() => { setEditingWinnerMap({ ...editingWinnerMap, [game.id]: true }); setWinnerInputMap({ ...winnerInputMap, [game.id]: winningNumber }); }}>
                                         <div className="text-7xl font-black text-white font-mono drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">{winningNumber}</div>
                                         <div className="text-[8px] text-cyan-500 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-all font-black tracking-widest">Modify Result</div>
