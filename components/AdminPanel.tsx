@@ -306,6 +306,7 @@ const DealerForm: React.FC<{
     );
 };
 
+// Hidden as requested. Removed from render but kept logic in case needed for core functions.
 const QuickResultConsole: React.FC<{ 
     games: Game[]; 
     onSetResult: (gameId: string, val: string, isUpdate: boolean) => Promise<void>; 
@@ -325,73 +326,7 @@ const QuickResultConsole: React.FC<{
         }
     };
 
-    return (
-        <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl mb-10">
-            <div className="p-6 bg-slate-800/60 border-b border-slate-700 flex justify-between items-center">
-                <h3 className="text-white font-black uppercase tracking-widest text-sm">Quick Result Console</h3>
-                <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded border border-cyan-500/30 font-black uppercase tracking-tighter">Fast Output Management</span>
-            </div>
-            <div className="overflow-x-auto no-scrollbar">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-900/50 border-b border-slate-800">
-                        <tr>
-                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Market</th>
-                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Draw Time</th>
-                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Current Win</th>
-                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Action Entry</th>
-                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Liquidity Control</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                        {games.map(g => (
-                            <tr key={g.id} className="hover:bg-white/5 transition-colors">
-                                <td className="p-4 text-xs font-black text-white uppercase">{g.name}</td>
-                                <td className="p-4 text-xs text-slate-400 font-mono">{g.drawTime}</td>
-                                <td className="p-4 text-center">
-                                    <span className={`text-xl font-black font-mono ${g.winningNumber ? 'text-amber-400' : 'text-slate-700'}`}>
-                                        {g.winningNumber || '--'}
-                                    </span>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex items-center gap-2">
-                                        <input 
-                                            type="text" 
-                                            maxLength={2}
-                                            placeholder="Num"
-                                            value={inputs[g.id] ?? ''}
-                                            onChange={e => setInputs(prev => ({ ...prev, [g.id]: e.target.value }))}
-                                            className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-center text-white font-mono font-bold focus:ring-1 focus:ring-cyan-500"
-                                        />
-                                        <button 
-                                            onClick={() => handleAction(g)}
-                                            disabled={loading[g.id]}
-                                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${g.winningNumber ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30' : 'bg-cyan-600 text-white shadow-lg'}`}
-                                        >
-                                            {loading[g.id] ? '...' : g.winningNumber ? 'Update' : 'Declare'}
-                                        </button>
-                                    </div>
-                                </td>
-                                <td className="p-4 text-right">
-                                    {g.winningNumber && !g.payoutsApproved ? (
-                                        <button 
-                                            onClick={() => onApprove(g.id)}
-                                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all"
-                                        >
-                                            Verify & Pay
-                                        </button>
-                                    ) : g.payoutsApproved ? (
-                                        <span className="text-[10px] font-black uppercase text-emerald-500 italic">Disbursed</span>
-                                    ) : (
-                                        <span className="text-[10px] font-black uppercase text-slate-600 italic">No Winner</span>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+    return null; // Hidden from view as per instructions
 };
 
 const BettingSheetView: React.FC<{ 
@@ -1021,7 +956,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'games' && (
         <div className="animate-fade-in space-y-10">
-            {/* Quick Result Entry Console */}
+            {/* Quick Result Entry Console - Hidden as requested */}
             <QuickResultConsole 
                 games={games} 
                 onSetResult={(id, val, isUpdate) => handleDeclareAction(id, val, isUpdate)} 
