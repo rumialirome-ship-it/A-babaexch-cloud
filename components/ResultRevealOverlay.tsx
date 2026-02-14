@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 
 interface ResultRevealOverlayProps {
@@ -8,15 +9,11 @@ interface ResultRevealOverlayProps {
 
 const TENSION_PHRASES = [
     "INITIATING DRAW...",
-    "COLLECTING ENTRIES...",
     "HARNESSING LUCK...",
     "STABILIZING ODDS...",
-    "FINALIZING PATH...",
     "ORACLE SPEAKING...",
-    "BRACING...",
     "LOCKING IN...",
     "CALIBRATING RESULTS...",
-    "VERIFYING INTEGRITY...",
     "ALMOST THERE...",
     "NUMBERS ALIGNING..."
 ];
@@ -64,8 +61,8 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
   const [elapsed, setElapsed] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
 
-  // Set to 30 seconds exactly (30,000ms)
-  const TOTAL_ROLL_TIME = 30000; 
+  // Set to 5 seconds exactly for fast declaration
+  const TOTAL_ROLL_TIME = 5000; 
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -82,7 +79,7 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
 
       phraseInterval = setInterval(() => {
         setPhraseIndex(prev => (prev + 1) % TENSION_PHRASES.length);
-      }, 2500);
+      }, 800); // Faster phrase rotation
 
       progressInterval = setInterval(() => {
         setElapsed(prev => prev + 50);

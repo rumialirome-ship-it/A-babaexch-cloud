@@ -122,6 +122,278 @@ const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
     </div>
 );
 
+const LedgersView: React.FC<{ 
+    admin: Admin; 
+    dealers: Dealer[]; 
+    topUpDealerWallet?: (id: string, amt: number) => Promise<void>; 
+    withdrawFromDealerWallet?: (id: string, amt: number) => Promise<void>; 
+    onRefresh: () => void;
+}> = ({ admin, dealers, topUpDealerWallet, withdrawFromDealerWallet, onRefresh }) => {
+    const [viewingAdminLedger, setViewingAdminLedger] = useState(false);
+    const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
+    const [amount, setAmount] = useState<string>('');
+    const [loading, setLoading] = useState(false);
+
+    const handleAction = async (type: 'topup' | 'withdraw') => {
+        if (!selectedDealer || !amount || parseFloat(amount) <= 0) return;
+        setLoading(true);
+        try {
+            if (type === 'topup') await topUpDealerWallet?.(selectedDealer.id, parseFloat(amount));
+            else await withdrawFromDealerWallet?.(selectedDealer.id, parseFloat(amount));
+            setAmount('');
+            setSelectedDealer(null);
+            onRefresh();
+        } catch (e) {
+            alert("Transaction failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">Financial Operations</h3>
+                <button onClick={() => setViewingAdminLedger(true)} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-red-400 font-black text-[10px] uppercase transition-all border border-slate-700 flex items-center gap-2">
+                    {Icons.bookOpen} Admin Ledger
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                    <h4 className="text-sm font-black text-cyan-400 uppercase tracking-widest mb-4">Dealer Wallet Management</h4>
+                    <div className="space-y-4">
+                        <select 
+                            value={selectedDealer?.id || ''} 
+                            onChange={(e) => setSelectedDealer(dealers.find(d => d.id === e.target.value) || null)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xs uppercase focus:ring-2 focus:ring-cyan-500"
+                        >
+                            <option value="">Select Dealer...</option>
+                            {dealers.map(d => <option key={d.id} value={d.id}>{d.name} (Rs {d.wallet.toLocaleString()})</option>)}
+                        </select>
+                        <input 
+                            type="number" 
+                            placeholder="Enter Amount" 
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono font-bold focus:ring-2 focus:ring-cyan-500"
+                        />
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => handleAction('withdraw')}
+                                disabled={loading || !selectedDealer}
+                                className="flex-1 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                            >
+                                Withdrawal
+                            </button>
+                            <button 
+                                onClick={() => handleAction('topup')}
+                                disabled={loading || !selectedDealer}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all disabled:opacity-50"
+                            >
+                                Deposit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl overflow-hidden flex flex-col">
+                    <h4 className="text-sm font-black text-amber-400 uppercase tracking-widest mb-4">Dealer Portfolios</h4>
+                    <div className="overflow-y-auto max-h-[300px] no-scrollbar space-y-3">
+                        {dealers.map(d => (
+                            <div key={d.id} className="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-all">
+                                <div>
+                                    <div className="text-xs font-black text-white uppercase">{d.name}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono uppercase">{d.id}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs font-black text-emerald-400 font-mono">Rs {d.wallet.toLocaleString()}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <Modal isOpen={viewingAdminLedger} onClose={() => setViewingAdminLedger(false)} title="System Master Ledger (Admin)" size="xl" themeColor="red">
+                <LedgerTable entries={admin.ledger} />
+            </Modal>
+        </div>
+    );
+};
+
+const DealerForm: React.FC<{ 
+    dealer?: Dealer, 
+    onSave: (d: any, originalId?: string) => Promise<void>, 
+    onCancel: () => void, 
+    adminPrizeRates: PrizeRates 
+}> = ({ dealer, onSave, onCancel, adminPrizeRates }) => {
+    const [name, setName] = useState(dealer?.name || '');
+    const [id, setId] = useState(dealer?.id || '');
+    const [password, setPassword] = useState(dealer?.password || '');
+    const [area, setArea] = useState(dealer?.area || '');
+    const [contact, setContact] = useState(dealer?.contact || '');
+    const [commissionRate, setCommissionRate] = useState(dealer?.commissionRate || 10);
+    const [prizeRates, setPrizeRates] = useState<PrizeRates>(dealer?.prizeRates || adminPrizeRates);
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await onSave({ name, id, password, area, contact, commissionRate, prizeRates, wallet: dealer?.wallet || 0 }, dealer?.id);
+        } catch (e) {
+            alert("Save failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Agency Name</label>
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Agency ID</label>
+                    <input type="text" value={id} onChange={e => setId(e.target.value)} required disabled={!!dealer} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500 disabled:opacity-50" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Pass-Key</label>
+                    <input type="text" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Network Comm %</label>
+                    <input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Regional Area</label>
+                    <input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Direct Contact</label>
+                    <input type="text" value={contact} onChange={e => setContact(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
+                </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800">
+                <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest text-center">Payout Multiplier Protocol</h4>
+                <div className="grid grid-cols-3 gap-3">
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-D Open</label>
+                        <input type="number" value={prizeRates.oneDigitOpen} onChange={e => setPrizeRates({...prizeRates, oneDigitOpen: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-D Close</label>
+                        <input type="number" value={prizeRates.oneDigitClose} onChange={e => setPrizeRates({...prizeRates, oneDigitClose: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">2-Digit</label>
+                        <input type="number" value={prizeRates.twoDigit} onChange={e => setPrizeRates({...prizeRates, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex gap-4 pt-4">
+                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest border border-slate-700">Cancel</button>
+                <button type="submit" disabled={loading} className="flex-2 px-12 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-cyan-900/20 active:scale-95 transition-all">
+                    {loading ? 'SYNCING...' : dealer ? 'APPLY UPDATE' : 'COMMIT REGISTRATION'}
+                </button>
+            </div>
+        </form>
+    );
+};
+
+const QuickResultConsole: React.FC<{ 
+    games: Game[]; 
+    onSetResult: (gameId: string, val: string, isUpdate: boolean) => Promise<void>; 
+    onApprove: (gameId: string) => Promise<void>;
+}> = ({ games, onSetResult, onApprove }) => {
+    const [inputs, setInputs] = useState<Record<string, string>>({});
+    const [loading, setLoading] = useState<Record<string, boolean>>({});
+
+    const handleAction = async (game: Game) => {
+        const val = inputs[game.id] || game.winningNumber || '';
+        if (!val) return;
+        setLoading(prev => ({ ...prev, [game.id]: true }));
+        try {
+            await onSetResult(game.id, val, !!game.winningNumber);
+        } finally {
+            setLoading(prev => ({ ...prev, [game.id]: false }));
+        }
+    };
+
+    return (
+        <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl mb-10">
+            <div className="p-6 bg-slate-800/60 border-b border-slate-700 flex justify-between items-center">
+                <h3 className="text-white font-black uppercase tracking-widest text-sm">Quick Result Console</h3>
+                <span className="text-[10px] bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded border border-cyan-500/30 font-black uppercase tracking-tighter">Fast Output Management</span>
+            </div>
+            <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-left">
+                    <thead className="bg-slate-900/50 border-b border-slate-800">
+                        <tr>
+                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Market</th>
+                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Draw Time</th>
+                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Current Win</th>
+                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Action Entry</th>
+                            <th className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Liquidity Control</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                        {games.map(g => (
+                            <tr key={g.id} className="hover:bg-white/5 transition-colors">
+                                <td className="p-4 text-xs font-black text-white uppercase">{g.name}</td>
+                                <td className="p-4 text-xs text-slate-400 font-mono">{g.drawTime}</td>
+                                <td className="p-4 text-center">
+                                    <span className={`text-xl font-black font-mono ${g.winningNumber ? 'text-amber-400' : 'text-slate-700'}`}>
+                                        {g.winningNumber || '--'}
+                                    </span>
+                                </td>
+                                <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            maxLength={2}
+                                            placeholder="Num"
+                                            value={inputs[g.id] ?? ''}
+                                            onChange={e => setInputs(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                            className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-center text-white font-mono font-bold focus:ring-1 focus:ring-cyan-500"
+                                        />
+                                        <button 
+                                            onClick={() => handleAction(g)}
+                                            disabled={loading[g.id]}
+                                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${g.winningNumber ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30' : 'bg-cyan-600 text-white shadow-lg'}`}
+                                        >
+                                            {loading[g.id] ? '...' : g.winningNumber ? 'Update' : 'Declare'}
+                                        </button>
+                                    </div>
+                                </td>
+                                <td className="p-4 text-right">
+                                    {g.winningNumber && !g.payoutsApproved ? (
+                                        <button 
+                                            onClick={() => onApprove(g.id)}
+                                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+                                        >
+                                            Verify & Pay
+                                        </button>
+                                    ) : g.payoutsApproved ? (
+                                        <span className="text-[10px] font-black uppercase text-emerald-500 italic">Disbursed</span>
+                                    ) : (
+                                        <span className="text-[10px] font-black uppercase text-slate-600 italic">No Winner</span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 const BettingSheetView: React.FC<{ 
     games: Game[]; 
     fetchWithAuth: any;
@@ -400,272 +672,7 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
     );
 };
 
-const NumberSummaryView: React.FC<{ 
-    games: Game[]; 
-    dealers: Dealer[];
-    fetchWithAuth: any;
-}> = ({ games, dealers, fetchWithAuth }) => {
-    // This component is now essentially the same as LiveView's content but perhaps with less frequent updates or specific historical focus.
-    // For consistency with the user's request, I will keep LiveView as the main destination for this design.
-    return <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} />;
-};
-
-const TransactionForm: React.FC<{
-    type: 'Top-up' | 'Withdraw';
-    accountName: string;
-    onExecute: (amount: number) => Promise<void>;
-    onCancel: () => void;
-}> = ({ type, accountName, onExecute, onCancel }) => {
-    const [amount, setAmount] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) return;
-        setLoading(true);
-        try {
-            await onExecute(amt);
-        } catch (err) {
-            alert("Transaction failed.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-                <p className="text-xs text-slate-400 mb-2">Executing <span className="font-bold text-white uppercase">{type}</span> for:</p>
-                <p className="text-xl font-black text-cyan-400 uppercase tracking-tight">{accountName}</p>
-            </div>
-            <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Amount (PKR)</label>
-                <input 
-                    type="number" 
-                    autoFocus 
-                    value={amount} 
-                    onChange={e => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    required
-                    className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 text-2xl font-mono font-black text-white focus:ring-2 focus:ring-cyan-500 transition-all"
-                />
-            </div>
-            <div className="flex gap-3 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 py-4 bg-slate-800 text-slate-400 rounded-xl font-black text-xs uppercase tracking-widest hover:text-white">Cancel</button>
-                <button type="submit" disabled={loading} className={`flex-2 px-8 py-4 ${type === 'Top-up' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'} text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all disabled:opacity-50`}>
-                    {loading ? 'Processing...' : `Confirm ${type}`}
-                </button>
-            </div>
-        </form>
-    );
-};
-
-const DealerForm: React.FC<{ dealer?: Dealer, onSave: (d: any, o?: string) => Promise<void>, onCancel: () => void, adminPrizeRates: PrizeRates }> = ({ dealer, onSave, onCancel, adminPrizeRates }) => {
-    const [name, setName] = useState(dealer?.name || '');
-    const [id, setId] = useState(dealer?.id || '');
-    const [password, setPassword] = useState(dealer?.password || '');
-    const [area, setArea] = useState(dealer?.area || '');
-    const [contact, setContact] = useState(dealer?.contact || '');
-    const [commissionRate, setCommissionRate] = useState(dealer?.commissionRate || 10);
-    const [wallet, setWallet] = useState(0);
-    const [prizeRates, setPrizeRates] = useState<PrizeRates>(dealer?.prizeRates || adminPrizeRates);
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            const dealerData = { name, id, password, area, contact, commissionRate, prizeRates, wallet };
-            await onSave(dealerData, dealer?.id);
-        } catch (e: any) {
-            alert(e.message || "Operation failed");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Dealer Name</label>
-                    <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
-                </div>
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Dealer ID</label>
-                    <input type="text" value={id} onChange={e => setId(e.target.value)} required disabled={!!dealer} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500 disabled:opacity-50" />
-                </div>
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Access Password</label>
-                    <input type="text" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
-                </div>
-                {!dealer && (
-                    <div>
-                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Initial Wallet</label>
-                        <input type="number" value={wallet} onChange={e => setWallet(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
-                    </div>
-                )}
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Commission %</label>
-                    <input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
-                </div>
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Location Area</label>
-                    <input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-cyan-500" />
-                </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest">Dealer Prize Protocols</h4>
-                <div className="grid grid-cols-3 gap-2">
-                    <div>
-                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Open</label>
-                        <input type="number" value={prizeRates.oneDigitOpen} onChange={e => setPrizeRates({...prizeRates, oneDigitOpen: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
-                    </div>
-                    <div>
-                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit Close</label>
-                        <input type="number" value={prizeRates.oneDigitClose} onChange={e => setPrizeRates({...prizeRates, oneDigitClose: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
-                    </div>
-                    <div>
-                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">2-Digit</label>
-                        <input type="number" value={prizeRates.twoDigit} onChange={e => setPrizeRates({...prizeRates, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black text-xs uppercase tracking-widest">Abort</button>
-                <button type="submit" disabled={loading} className="flex-2 px-12 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-                    {loading ? 'Processing...' : dealer ? 'Apply Changes' : 'Register Dealer'}
-                </button>
-            </div>
-        </form>
-    );
-};
-
-const LedgersView: React.FC<{
-    admin: Admin;
-    dealers: Dealer[];
-    topUpDealerWallet?: (dealerId: string, amount: number) => Promise<void>;
-    withdrawFromDealerWallet?: (dealerId: string, amount: number) => Promise<void>;
-    onRefresh: () => void;
-}> = ({ admin, dealers, topUpDealerWallet, withdrawFromDealerWallet, onRefresh }) => {
-    const [subTab, setSubTab] = useState<'dealer' | 'admin'>('dealer');
-    const [selectedDealerForLedger, setSelectedDealerForLedger] = useState<Dealer | null>(null);
-    const [selectedDealerForTransaction, setSelectedDealerForTransaction] = useState<{ dealer: Dealer, type: 'Top-up' | 'Withdraw' } | null>(null);
-
-    return (
-        <div className="space-y-8 animate-fade-in">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700">
-                    <button 
-                        onClick={() => setSubTab('dealer')} 
-                        className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'dealer' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                    >
-                        Dealer Accounts
-                    </button>
-                    <button 
-                        onClick={() => setSubTab('admin')} 
-                        className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'admin' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                    >
-                        Admin Portfolio
-                    </button>
-                </div>
-            </div>
-
-            {subTab === 'admin' ? (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-end">
-                        <div>
-                            <h3 className="text-xl font-black text-white uppercase tracking-widest mb-1">Central Admin Ledger</h3>
-                            <p className="text-xs text-slate-500 font-bold uppercase tracking-tighter">System-wide treasury tracking</p>
-                        </div>
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-red-500/20 text-right">
-                             <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Total Reserves</div>
-                             <div className="text-2xl font-black text-white font-mono">Rs {admin.wallet.toLocaleString()}</div>
-                        </div>
-                    </div>
-                    <LedgerTable entries={admin.ledger || []} />
-                </div>
-            ) : (
-                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
-                    <div className="p-6 border-b border-slate-700 bg-slate-800/60">
-                        <h3 className="text-white font-black uppercase tracking-widest">Agency Liquidity Management</h3>
-                    </div>
-                    <div className="overflow-x-auto no-scrollbar">
-                        <table className="w-full text-left min-w-[800px]">
-                            <thead className="bg-slate-900/50 border-b border-slate-800">
-                                <tr>
-                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer Profile</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Current Balance</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Accounting Tools</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {dealers.map(d => (
-                                    <tr key={d.id} className="hover:bg-cyan-500/5 transition-colors group">
-                                        <td className="p-4">
-                                            <div className="text-sm font-black text-white uppercase">{d.name}</div>
-                                            <div className="text-[10px] font-mono text-cyan-500 uppercase tracking-tighter">{d.id}</div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="text-lg font-black text-emerald-400 font-mono">Rs {d.wallet.toLocaleString()}</div>
-                                            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Authorized Pool</div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => setSelectedDealerForTransaction({ dealer: d, type: 'Top-up' })} className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-500/20 transition-all">Top Up</button>
-                                                <button onClick={() => setSelectedDealerForTransaction({ dealer: d, type: 'Withdraw' })} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-rose-500/20 transition-all">Withdraw</button>
-                                                <button onClick={() => setSelectedDealerForLedger(d)} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all">Audit Logs</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            <Modal 
-                isOpen={!!selectedDealerForTransaction} 
-                onClose={() => setSelectedDealerForTransaction(null)} 
-                title={`${selectedDealerForTransaction?.type} Fund Allocation`}
-                themeColor={selectedDealerForTransaction?.type === 'Top-up' ? 'emerald' : 'rose'}
-            >
-                {selectedDealerForTransaction && (
-                    <TransactionForm 
-                        type={selectedDealerForTransaction.type} 
-                        accountName={selectedDealerForTransaction.dealer.name}
-                        onExecute={async (amt) => {
-                            if (selectedDealerForTransaction.type === 'Top-up') {
-                                await topUpDealerWallet?.(selectedDealerForTransaction.dealer.id, amt);
-                            } else {
-                                await withdrawFromDealerWallet?.(selectedDealerForTransaction.dealer.id, amt);
-                            }
-                            onRefresh();
-                            setSelectedDealerForTransaction(null);
-                        }}
-                        onCancel={() => setSelectedDealerForTransaction(null)}
-                    />
-                )}
-            </Modal>
-
-            <Modal 
-                isOpen={!!selectedDealerForLedger} 
-                onClose={() => setSelectedDealerForLedger(null)} 
-                title={`Detailed Audit: ${selectedDealerForLedger?.name}`} 
-                size="xl" 
-                themeColor="cyan"
-            >
-                {selectedDealerForLedger && <LedgerTable entries={selectedDealerForLedger.ledger || []} />}
-            </Modal>
-        </div>
-    );
-};
-
-// --- FINANCIAL SUMMARY COMPONENT ---
+// --- UPDATED STAKESVIEW COMPONENT ---
 const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [loading, setLoading] = useState(true);
@@ -722,9 +729,9 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-2xl font-black text-white font-mono">Rs {summary.totals.totalStake.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Total Comm. Burn</div>
-                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {(summary.totals.totalDealerCommission + summary.totals.totalUserCommission).toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Dlr: {summary.totals.totalDealerCommission.toFixed(0)} | Usr: {summary.totals.totalUserCommission.toFixed(0)}</div>
+                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1 text-sky-400">Dealer Comm. Burn</div>
+                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {summary.totals.totalDealerCommission.toLocaleString()}</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Agency network payouts</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div className="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Total Payouts</div>
@@ -733,7 +740,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                 <div className="bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20">
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Volume - Payouts - Total Comm</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Stake - Payouts - (Dlr Comm + Usr Comm)</div>
                 </div>
             </div>
 
@@ -853,8 +860,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const { fetchWithAuth } = useAuth();
 
-  const handleDeclareAction = async (gameId: string, isUpdate: boolean) => {
-    const val = winnerInputMap[gameId];
+  const handleDeclareAction = async (gameId: string, val: string, isUpdate: boolean) => {
     if (!val) return;
     setPendingDeclareMap(prev => ({ ...prev, [gameId]: true }));
     setEditingWinnerMap(prev => ({ ...prev, [gameId]: false }));
@@ -1014,84 +1020,94 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {activeTab === 'games' && (
-        <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {games.map(game => {
-                const isEditingResult = editingWinnerMap[game.id];
-                const isPendingResult = pendingDeclareMap[game.id];
-                const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
-                const isEditingTime = editingTimeId === game.id;
+        <div className="animate-fade-in space-y-10">
+            {/* Quick Result Entry Console */}
+            <QuickResultConsole 
+                games={games} 
+                onSetResult={(id, val, isUpdate) => handleDeclareAction(id, val, isUpdate)} 
+                onApprove={async (id) => { await approvePayouts?.(id); onRefreshData?.(); }}
+            />
 
-                return (
-                    <div key={game.id} className="bg-slate-800/60 rounded-3xl border border-slate-700 shadow-2xl flex flex-col transition-all group backdrop-blur-md">
-                        <MarketCountdown drawTime={game.drawTime} />
-                        <div className="p-6 space-y-6 flex-grow">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h4 className="text-white font-black uppercase text-xl tracking-tight">{game.name}</h4>
-                                    <div className="flex items-center gap-3 mt-2">
-                                        {isEditingTime ? (
-                                            <div className="flex items-center gap-2 animate-fade-in bg-slate-900 px-2 py-1 rounded border border-cyan-500/30">
-                                                <input 
-                                                    type="time" 
-                                                    autoFocus
-                                                    value={tempTime} 
-                                                    onChange={(e) => setTempTime(e.target.value)}
-                                                    className="bg-transparent border-none text-[10px] text-white font-bold focus:ring-0 p-0 w-20"
-                                                />
-                                                <button onClick={async () => { await updateGameDrawTime?.(game.id, tempTime); setEditingTimeId(null); }} className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black">✓</button>
-                                                <button onClick={() => setEditingTimeId(null)} className="text-rose-400 hover:text-rose-300 text-[10px] font-black">✕</button>
-                                            </div>
-                                        ) : (
-                                            <div 
-                                                onClick={() => { setEditingTimeId(game.id); setTempTime(game.drawTime); }}
-                                                className="group/time cursor-pointer flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-900 px-2 py-1 rounded border border-transparent hover:border-cyan-500/30 transition-all"
-                                                title="Click to edit draw time"
-                                            >
-                                                <span>Draw: {game.drawTime}</span>
-                                                <span className="opacity-0 group-hover/time:opacity-100 text-[8px] text-cyan-500">Edit</span>
-                                            </div>
-                                        )}
-                                        
-                                        {!isEditingTime && (
-                                            <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-700 shadow-inner">
-                                                <button onClick={() => adjustDrawTime(game.id, game.drawTime, -5)} className="px-2 py-1 text-slate-500 hover:text-rose-400 transition-colors active:scale-75">{Icons.minus}</button>
-                                                <span className="w-px h-3 bg-slate-700 mx-0.5"></span>
-                                                <button onClick={() => adjustDrawTime(game.id, game.drawTime, 5)} className="px-2 py-1 text-slate-500 hover:text-emerald-400 transition-colors active:scale-75">{Icons.plus}</button>
-                                            </div>
-                                        )}
+            {/* Market Detail Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {games.map(game => {
+                    const isEditingResult = editingWinnerMap[game.id];
+                    const isPendingResult = pendingDeclareMap[game.id];
+                    const winningNumber = game.winningNumber && !game.winningNumber.endsWith('_') ? game.winningNumber : null;
+                    const isEditingTime = editingTimeId === game.id;
+
+                    return (
+                        <div key={game.id} className="bg-slate-800/60 rounded-3xl border border-slate-700 shadow-2xl flex flex-col transition-all group backdrop-blur-md">
+                            <MarketCountdown drawTime={game.drawTime} />
+                            <div className="p-6 space-y-6 flex-grow">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="text-white font-black uppercase text-xl tracking-tight">{game.name}</h4>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            {isEditingTime ? (
+                                                <div className="flex items-center gap-2 animate-fade-in bg-slate-900 px-2 py-1 rounded border border-cyan-500/30">
+                                                    <input 
+                                                        type="time" 
+                                                        autoFocus
+                                                        value={tempTime} 
+                                                        onChange={(e) => setTempTime(e.target.value)}
+                                                        className="bg-transparent border-none text-[10px] text-white font-bold focus:ring-0 p-0 w-20"
+                                                    />
+                                                    <button onClick={async () => { await updateGameDrawTime?.(game.id, tempTime); setEditingTimeId(null); }} className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black">✓</button>
+                                                    <button onClick={() => setEditingTimeId(null)} className="text-rose-400 hover:text-rose-300 text-[10px] font-black">✕</button>
+                                                </div>
+                                            ) : (
+                                                <div 
+                                                    onClick={() => { setEditingTimeId(game.id); setTempTime(game.drawTime); }}
+                                                    className="group/time cursor-pointer flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-slate-900 px-2 py-1 rounded border border-transparent hover:border-cyan-500/30 transition-all"
+                                                    title="Click to edit draw time"
+                                                >
+                                                    <span>Draw: {game.drawTime}</span>
+                                                    <span className="opacity-0 group-hover/time:opacity-100 text-[8px] text-cyan-500">Edit</span>
+                                                </div>
+                                            )}
+                                            
+                                            {!isEditingTime && (
+                                                <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-700 shadow-inner">
+                                                    <button onClick={() => adjustDrawTime(game.id, game.drawTime, -5)} className="px-2 py-1 text-slate-500 hover:text-rose-400 transition-colors active:scale-75">{Icons.minus}</button>
+                                                    <span className="w-px h-3 bg-slate-700 mx-0.5"></span>
+                                                    <button onClick={() => adjustDrawTime(game.id, game.drawTime, 5)} className="px-2 py-1 text-slate-500 hover:text-emerald-400 transition-colors active:scale-75">{Icons.plus}</button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="bg-slate-900/80 p-8 rounded-2xl border border-slate-700 flex flex-col items-center justify-center min-h-[160px] relative overflow-hidden group/box">
-                                <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-4">Official Result</label>
-                                {isPendingResult ? (
-                                    <div className="text-cyan-400 font-black uppercase animate-pulse text-sm tracking-widest">Validating...</div>
-                                ) : winningNumber && !isEditingResult ? (
-                                    <div className="cursor-pointer text-center group" onClick={() => { setEditingWinnerMap({ ...editingWinnerMap, [game.id]: true }); setWinnerInputMap({ ...winnerInputMap, [game.id]: winningNumber }); }}>
-                                        <div className="text-7xl font-black text-white font-mono drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">{winningNumber}</div>
-                                        <div className="text-[8px] text-cyan-500 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-all font-black tracking-widest">Modify Result</div>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-3 animate-fade-in">
-                                        <input type="text" maxLength={2} autoFocus value={winnerInputMap[game.id] || ''} onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})} className="bg-slate-800 border border-slate-600 rounded-xl w-24 p-3 text-center text-4xl font-mono font-black text-white focus:ring-2 focus:ring-cyan-500 shadow-inner" placeholder="--" />
-                                        <button onClick={() => handleDeclareAction(game.id, !!winningNumber)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-90 transition-all">SET</button>
-                                    </div>
-                                )}
-                            </div>
+                                <div className="bg-slate-900/80 p-8 rounded-2xl border border-slate-700 flex flex-col items-center justify-center min-h-[160px] relative overflow-hidden group/box">
+                                    <label className="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-4">Official Result</label>
+                                    {isPendingResult ? (
+                                        <div className="text-cyan-400 font-black uppercase animate-pulse text-sm tracking-widest">Validating...</div>
+                                    ) : winningNumber && !isEditingResult ? (
+                                        <div className="cursor-pointer text-center group" onClick={() => { setEditingWinnerMap({ ...editingWinnerMap, [game.id]: true }); setWinnerInputMap({ ...winnerInputMap, [game.id]: winningNumber }); }}>
+                                            <div className="text-7xl font-black text-white font-mono drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">{winningNumber}</div>
+                                            <div className="text-[8px] text-cyan-500 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-all font-black tracking-widest">Modify Result</div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-3 animate-fade-in">
+                                            <input type="text" maxLength={2} autoFocus value={winnerInputMap[game.id] || ''} onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})} className="bg-slate-800 border border-slate-600 rounded-xl w-24 p-3 text-center text-4xl font-mono font-black text-white focus:ring-2 focus:ring-cyan-500 shadow-inner" placeholder="--" />
+                                            <button onClick={() => handleDeclareAction(game.id, winnerInputMap[game.id], !!winningNumber)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-90 transition-all">SET</button>
+                                        </div>
+                                    )}
+                                </div>
 
-                            <div className="flex gap-2">
-                                {game.winningNumber && !game.payoutsApproved && (
-                                    <button onClick={() => approvePayouts?.(game.id)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/30 transition-all active:scale-95">Verify & Pay All</button>
-                                )}
-                                {game.payoutsApproved && (
-                                    <div className="flex-1 bg-slate-900/50 text-slate-500 border border-slate-800 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center italic">Verified Batch Paid</div>
-                                )}
+                                <div className="flex gap-2">
+                                    {game.winningNumber && !game.payoutsApproved && (
+                                        <button onClick={() => approvePayouts?.(game.id)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/30 transition-all active:scale-95">Verify & Pay All</button>
+                                    )}
+                                    {game.payoutsApproved && (
+                                        <div className="flex-1 bg-slate-900/50 text-slate-500 border border-slate-800 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center italic">Verified Batch Paid</div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
         </div>
       )}
 

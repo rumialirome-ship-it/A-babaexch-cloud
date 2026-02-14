@@ -99,7 +99,7 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
 };
 
 const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
-    if (!winningNumber) return 0;
+    if (!winningNumber || winningNumber.includes('_')) return 0;
     let winningCount = 0;
     const nums = typeof bet.numbers === 'string' ? JSON.parse(bet.numbers) : bet.numbers;
     nums.forEach(num => {
@@ -412,7 +412,7 @@ module.exports = {
         })();
     },
     getDetailedWinners: () => {
-        const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL AND winningNumber != ""').all();
+        const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL AND winningNumber NOT LIKE "%\_%" ESCAPE "\\"').all();
         const allWinners = [];
         games.forEach(game => {
             const gameBets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(game.id);
@@ -442,26 +442,34 @@ module.exports = {
         const games = db.prepare('SELECT * FROM games').all();
         const summaries = games.map(g => {
             const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(g.id);
-            let stake = 0, payouts = 0, userComm = 0, dealerComm = 0;
+            let stake = 0, payouts = 0, userCommTotal = 0, dealerCommTotal = 0;
+            
             bets.forEach(b => {
                 stake += b.totalAmount;
-                const user = db.prepare('SELECT * FROM users WHERE id = ?').get(b.userId);
-                const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(b.dealerId);
-                if (user) userComm += b.totalAmount * (user.commissionRate / 100);
-                if (dealer) dealerComm += b.totalAmount * (dealer.commissionRate / 100);
-                if (g.winningNumber && user) payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
+                const user = db.prepare('SELECT commissionRate, prizeRates FROM users WHERE id = ?').get(b.userId);
+                const dealer = db.prepare('SELECT commissionRate FROM dealers WHERE id = ?').get(b.dealerId);
+                
+                if (user) userCommTotal += b.totalAmount * (user.commissionRate / 100);
+                if (dealer) dealerCommTotal += b.totalAmount * (dealer.commissionRate / 100);
+                
+                // Only calculate payouts if the winning number is valid and fully declared
+                if (g.winningNumber && !g.winningNumber.includes('_') && user) {
+                    payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
+                }
             });
+
             return { 
                 gameId: g.id,
                 gameName: g.name, 
                 winningNumber: g.winningNumber || '-', 
                 totalStake: stake, 
                 totalPayouts: payouts, 
-                userCommission: userComm,
-                dealerCommission: dealerComm,
-                netProfit: stake - payouts - userComm - dealerComm 
+                userCommission: userCommTotal,
+                dealerCommission: dealerCommTotal,
+                netProfit: stake - payouts - userCommTotal - dealerCommTotal 
             };
         });
+
         return { 
             games: summaries, 
             totals: summaries.reduce((acc, s) => ({
@@ -549,18 +557,28 @@ module.exports = {
     approvePayouts: (gameId) => {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
-            if (!game || !game.winningNumber || game.payoutsApproved) return { success: false };
-            const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId);
-            bets.forEach(bet => {
-                const user = db.prepare('SELECT * FROM users WHERE id = ?').get(bet.userId);
-                const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
+            if (!game || !game.winningNumber || game.winningNumber.includes('_') || game.payoutsApproved) return { success: false };
+            
+            // Optimized query: Join users and bets to get everything needed for payout in one go
+            const betsWithUsers = db.prepare(`
+                SELECT b.*, u.prizeRates 
+                FROM bets b 
+                JOIN users u ON b.userId = u.id 
+                WHERE b.gameId = ?
+            `).all(gameId);
+
+            betsWithUsers.forEach(bet => {
+                const payout = calculatePayout(bet, game.winningNumber, game.name, bet.prizeRates);
                 if (payout > 0) {
-                    db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, user.id);
+                    db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, bet.userId);
+                    // Fetch new balance to maintain ledger integrity
+                    const newUser = db.prepare('SELECT wallet FROM users WHERE id = ?').get(bet.userId);
                     db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), user.id, 'USER', new Date().toISOString(), `Winning Payout: ${game.name}`, 0, payout, user.wallet + payout
+                        uuidv4(), bet.userId, 'USER', new Date().toISOString(), `Winning Payout: ${game.name}`, 0, payout, newUser.wallet
                     );
                 }
             });
+            
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
             return { success: true };
         })();
