@@ -10,6 +10,8 @@ interface WinningTicket {
     id: string;
     userName: string;
     userId: string;
+    dealerName: string;
+    dealerId: string;
     gameName: string;
     winningNumber: string;
     payout: number;
@@ -317,38 +319,44 @@ const WinnersView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     return (
         <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">Global Payout Hit List</h3>
-                <button onClick={loadWinners} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-cyan-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh Hits</button>
+                <h3 className="text-xl font-black text-white uppercase tracking-widest">Official Winners List</h3>
+                <button onClick={loadWinners} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-amber-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh Winners</button>
             </div>
 
             <div className="bg-slate-800/40 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
                 <div className="overflow-x-auto no-scrollbar">
-                    <table className="w-full text-left min-w-[800px]">
+                    <table className="w-full text-left min-w-[1000px]">
                         <thead className="bg-slate-800/80 border-b border-slate-700">
                             <tr>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">User Name</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Player</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Hit Number</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Hit</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Prize Amount</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={4} className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Searching hit database...</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Fetching winning data...</td></tr>
                             ) : winners.length === 0 ? (
-                                <tr><td colSpan={4} className="p-20 text-center text-slate-600 font-black uppercase text-xs">No winners found for current cycle</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center text-slate-600 font-black uppercase text-xs">No recorded winners for this cycle</td></tr>
                             ) : winners.map(win => (
-                                <tr key={win.id} className="hover:bg-cyan-500/5 transition-all group">
-                                    <td className="p-4">
+                                <tr key={win.id} className="hover:bg-amber-500/5 transition-all group">
+                                    <td className="p-4 border-l-4 border-transparent group-hover:border-amber-400">
                                         <div className="text-white font-black text-sm uppercase">{win.userName}</div>
                                         <div className="text-[9px] text-slate-500 font-mono tracking-widest">{win.userId}</div>
                                     </td>
-                                    <td className="p-4 text-cyan-400 font-black uppercase text-xs">{win.gameName}</td>
+                                    <td className="p-4">
+                                        <div className="text-sky-400 font-bold text-xs uppercase">{win.dealerName}</div>
+                                        <div className="text-[9px] text-slate-500 font-mono">{win.dealerId}</div>
+                                    </td>
+                                    <td className="p-4 text-slate-300 font-black uppercase text-xs">{win.gameName}</td>
                                     <td className="p-4 text-center">
-                                        <span className="bg-emerald-500/10 text-emerald-400 px-5 py-1.5 rounded-xl border border-emerald-500/20 font-mono font-black text-xl shadow-[0_0_15px_rgba(52,211,153,0.1)]">{win.winningNumber}</span>
+                                        <span className="bg-amber-400/20 text-amber-400 px-5 py-1.5 rounded-xl border border-amber-400/30 font-mono font-black text-xl shadow-[0_0_15px_rgba(251,191,36,0.1)]">{win.winningNumber}</span>
                                     </td>
                                     <td className="p-4 text-right">
                                         <div className="text-emerald-400 font-black font-mono text-xl">Rs {win.payout.toLocaleString()}</div>
+                                        <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{new Date(win.timestamp).toLocaleTimeString()}</div>
                                     </td>
                                 </tr>
                             ))}
@@ -409,7 +417,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: 'live', label: 'Live' },
     { id: 'stakes', label: 'Stakes' },
     { id: 'games', label: 'Markets' },
-    { id: 'winners', label: 'Hit List' },
+    { id: 'winners', label: 'Winners' },
     { id: 'users', label: 'Users' },
     { id: 'dealers', label: 'Dealers' },
   ];
@@ -427,6 +435,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
+      {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'live' && <LiveView fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'stakes' && <StakesView fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'winners' && <WinnersView fetchWithAuth={fetchWithAuth} />}

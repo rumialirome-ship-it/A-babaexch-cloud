@@ -1,5 +1,5 @@
 
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { Role, User, Dealer, Admin } from '../types';
 
 interface AuthContextType {
@@ -24,12 +24,11 @@ const parseAccountDates = (acc: any) => {
     return acc;
 };
 
-// Safe helper for localStorage
 const getStoredToken = () => {
     try {
         return localStorage.getItem('authToken');
     } catch (e) {
-        console.warn("LocalStorage access denied by device settings.");
+        console.warn("LocalStorage access denied.");
         return null;
     }
 };
@@ -40,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [token, setToken] = useState<string | null>(getStoredToken());
     const [loading, setLoading] = useState<boolean>(true);
     const [verifyData, setVerifyData] = useState<any>(null);
+    const isFetchingRef = useRef(false);
 
     const logout = useCallback(() => {
         setRole(null); setAccount(null); setToken(null); setVerifyData(null);
@@ -66,10 +66,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [token, logout]);
     
     useEffect(() => {
-        let poll: ReturnType<typeof setInterval>;
         const verify = async () => {
+            if (isFetchingRef.current) return;
             const currentToken = getStoredToken();
             if (!currentToken) { setLoading(false); return; }
+            
+            isFetchingRef.current = true;
             try {
                 const response = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${currentToken}` } });
                 if (!response.ok) throw new Error('Fail');
@@ -77,25 +79,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setAccount(parseAccountDates(data.account));
                 setRole(data.role);
                 setVerifyData(data);
-                setLoading(false);
-
-                // Polling at 60s to reduce refresh loops
-                poll = setInterval(async () => {
-                    const r = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${currentToken}` }});
-                    if (r.ok) { 
-                        const d = await r.json(); 
-                        setAccount(parseAccountDates(d.account)); 
-                    } else if (r.status === 401 || r.status === 403) {
-                        logout();
-                    }
-                }, 60000); 
             } catch (e) { 
                 logout(); 
-                setLoading(false); 
+            } finally {
+                setLoading(false);
+                isFetchingRef.current = false;
             }
         };
         verify();
-        return () => poll && clearInterval(poll);
     }, [logout]);
 
     const login = async (id: string, pass: string) => {

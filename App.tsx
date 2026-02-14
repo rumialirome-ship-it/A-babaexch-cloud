@@ -79,7 +79,10 @@ const AppContent: React.FC = () => {
     const fetchPublicData = useCallback(async () => {
         try {
             const gamesResponse = await fetch('/api/games');
-            if (gamesResponse.ok) setGames(await gamesResponse.json());
+            if (gamesResponse.ok) {
+                const data = await gamesResponse.json();
+                setGames(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+            }
         } catch (e) {}
     }, []);
 
@@ -89,8 +92,9 @@ const AppContent: React.FC = () => {
         try {
             const response = await fetchWithAuth('/api/auth/verify');
             if (response.ok) {
-                const parsedData = parseAllDates(await response.json());
-                if (parsedData.account) setAccount(parsedData.account);
+                const raw = await response.json();
+                const parsedData = parseAllDates(raw);
+                if (parsedData.account) setAccount(prev => JSON.stringify(prev) === JSON.stringify(parsedData.account) ? prev : parsedData.account);
                 if (role === Role.Admin) { 
                     setUsers(parsedData.users || []); 
                     setDealers(parsedData.dealers || []); 
@@ -124,21 +128,20 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         fetchPublicData();
-        const interval = setInterval(fetchPublicData, 90000); // 90s public poll
+        const interval = setInterval(fetchPublicData, 120000); 
         return () => clearInterval(interval);
     }, [fetchPublicData]);
 
     useEffect(() => {
         if (role) {
-            // Decoupled initial fetch from interval to prevent re-trigger loop
             fetchPrivateData();
-            const interval = setInterval(fetchPrivateData, 75000); // 75s private poll
+            const interval = setInterval(fetchPrivateData, 95000); 
             return () => clearInterval(interval);
         } else {
             setHasInitialFetched(false);
             setUsers([]); setBets([]); setDealers([]);
         }
-    }, [role, fetchPrivateData]); // Removed hasInitialFetched from dependencies
+    }, [role, fetchPrivateData]);
 
     useEffect(() => {
         if (games.length > 0 && lastGamesRef.current.length > 0) {

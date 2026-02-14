@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 
 interface ResultRevealOverlayProps {
@@ -65,7 +64,7 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
   const [elapsed, setElapsed] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
 
-  // Set to 30 seconds exactly
+  // Set to 30 seconds exactly (30,000ms)
   const TOTAL_ROLL_TIME = 30000; 
 
   useEffect(() => {

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType } from '../types';
 import { Icons } from '../constants';

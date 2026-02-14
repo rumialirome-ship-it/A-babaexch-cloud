@@ -99,10 +99,11 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
 };
 
 const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
+    if (!winningNumber) return 0;
     let winningCount = 0;
-    const nums = JSON.parse(bet.numbers);
+    const nums = typeof bet.numbers === 'string' ? JSON.parse(bet.numbers) : bet.numbers;
     nums.forEach(num => {
-        if (bet.subGameType === '1 Digit Open' && winningNumber.length === 2 && num === winningNumber[0]) winningCount++;
+        if (bet.subGameType === '1 Digit Open' && winningNumber.length >= 1 && num === winningNumber[0]) winningCount++;
         else if (bet.subGameType === '1 Digit Close') {
             if (gameName === 'AKC' && num === winningNumber) winningCount++;
             else if (winningNumber.length === 2 && num === winningNumber[1]) winningCount++;
@@ -110,7 +111,7 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
         else if (num === winningNumber) winningCount++;
     });
     if (winningCount === 0) return 0;
-    const rates = safeJsonParse(prizeRates);
+    const rates = typeof prizeRates === 'string' ? safeJsonParse(prizeRates) : prizeRates;
     const rate = bet.subGameType === '1 Digit Open' ? rates.oneDigitOpen : (bet.subGameType === '1 Digit Close' ? rates.oneDigitClose : rates.twoDigit);
     return winningCount * bet.amountPerNumber * rate;
 };
@@ -150,6 +151,113 @@ module.exports = {
             return a;
         });
     },
+    findUsersByDealerId: (dealerId) => {
+        return db.prepare('SELECT * FROM users WHERE dealerId = ?').all(dealerId).map(u => {
+            u.prizeRates = safeJsonParse(u.prizeRates);
+            u.betLimits = safeJsonParse(u.betLimits);
+            u.isRestricted = !!u.isRestricted;
+            u.ledger = db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC LIMIT 50').all(u.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+            return u;
+        });
+    },
+    findBetsByDealerId: (dealerId) => {
+        return db.prepare('SELECT * FROM bets WHERE dealerId = ?').all(dealerId).map(b => {
+            b.numbers = safeJsonParse(b.numbers);
+            b.timestamp = new Date(b.timestamp);
+            return b;
+        });
+    },
+    findBetsByUserId: (userId) => {
+        return db.prepare('SELECT * FROM bets WHERE userId = ?').all(userId).map(b => {
+            b.numbers = safeJsonParse(b.numbers);
+            b.timestamp = new Date(b.timestamp);
+            return b;
+        });
+    },
+    createUser: (u) => {
+        const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
+        const defaultBetLimits = JSON.stringify({ oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });
+        const wallet = parseFloat(u.wallet) || 0;
+        db.transaction(() => {
+            db.prepare(`INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, prizeRates, betLimits) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                u.id, u.name, u.password, u.dealerId, u.area || '', u.contact || '', wallet, u.commissionRate || 5, 
+                u.prizeRates ? JSON.stringify(u.prizeRates) : defaultPrizeRates, 
+                u.betLimits ? JSON.stringify(u.betLimits) : defaultBetLimits
+            );
+            if (wallet > 0) {
+                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    uuidv4(), u.id, 'USER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
+                );
+            }
+        })();
+    },
+    updateUser: (id, u) => {
+        db.prepare('UPDATE users SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ? WHERE id = ?').run(
+            u.name, u.password, u.area, u.contact, u.commissionRate, JSON.stringify(u.prizeRates), id
+        );
+    },
+    updateDealer: (id, d) => {
+        db.prepare('UPDATE dealers SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ? WHERE id = ?').run(
+            d.name, d.password, d.area, d.contact, d.commissionRate, JSON.stringify(d.prizeRates), id
+        );
+    },
+    updateWallet: (id, table, amount, type, actorId) => {
+        return db.transaction(() => {
+            const acc = db.prepare(`SELECT wallet FROM ${table} WHERE id = ?`).get(id);
+            if (!acc) throw new Error('Account not found');
+            const amt = parseFloat(amount);
+            const newBalance = type === 'credit' ? acc.wallet + amt : acc.wallet - amt;
+            if (newBalance < 0) throw new Error('Insufficient funds');
+            
+            db.prepare(`UPDATE ${table} SET wallet = ? WHERE id = ?`).run(newBalance, id);
+            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                uuidv4(), id, table.toUpperCase().slice(0, -1), new Date().toISOString(), 
+                `${type === 'credit' ? 'Deposit' : 'Withdrawal'} by ${actorId}`, 
+                type === 'debit' ? amt : 0, type === 'credit' ? amt : 0, newBalance
+            );
+            return newBalance;
+        })();
+    },
+    placeBet: (userId, data) => {
+        return db.transaction(() => {
+            const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+            if (!user) throw new Error('User not found');
+            
+            const processBet = (gameId, betGroups) => {
+                const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
+                if (!game) throw new Error(`Game ${gameId} not found`);
+                if (!isGameOpen(game.drawTime)) throw new Error(`Market for ${game.name} is closed`);
+
+                let totalCost = 0;
+                betGroups.forEach(bg => totalCost += bg.numbers.length * bg.amountPerNumber);
+
+                const currentBalance = db.prepare('SELECT wallet FROM users WHERE id = ?').get(userId).wallet;
+                if (currentBalance < totalCost) throw new Error('Insufficient wallet balance');
+
+                betGroups.forEach(bg => {
+                    db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                        uuidv4(), userId, user.dealerId, gameId, bg.subGameType, JSON.stringify(bg.numbers), 
+                        bg.amountPerNumber, bg.numbers.length * bg.amountPerNumber, new Date().toISOString()
+                    );
+                });
+
+                const finalBalance = currentBalance - totalCost;
+                db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(finalBalance, userId);
+                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    uuidv4(), userId, 'USER', new Date().toISOString(), `Bet placed on ${game.name}`, totalCost, 0, finalBalance
+                );
+            };
+
+            if (data.isMultiGame) {
+                Object.entries(data.multiGameBets).forEach(([gid, gdata]) => processBet(gid, gdata.betGroups));
+            } else {
+                processBet(data.gameId, data.betGroups);
+            }
+            return { success: true };
+        })();
+    },
     getDetailedWinners: () => {
         const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL AND winningNumber != ""').all();
         const allWinners = [];
@@ -160,7 +268,18 @@ module.exports = {
                 if (!user) return;
                 const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
                 if (payout > 0) {
-                    allWinners.push({ id: bet.id, userName: user.name, userId: user.id, gameName: game.name, winningNumber: game.winningNumber, payout: payout, timestamp: bet.timestamp });
+                    const dealer = db.prepare('SELECT name FROM dealers WHERE id = ?').get(bet.dealerId);
+                    allWinners.push({ 
+                        id: bet.id, 
+                        userName: user.name, 
+                        userId: user.id, 
+                        dealerName: dealer ? dealer.name : 'Unknown',
+                        dealerId: bet.dealerId,
+                        gameName: game.name, 
+                        winningNumber: game.winningNumber, 
+                        payout: payout, 
+                        timestamp: bet.timestamp 
+                    });
                 }
             });
         });
@@ -203,35 +322,20 @@ module.exports = {
     },
     getLiveStats: () => {
         const bets = db.prepare('SELECT * FROM bets').all();
-        
-        // Dealer Stats
         const dealerMap = {};
         const dealers = db.prepare('SELECT id, name FROM dealers').all();
         dealers.forEach(d => { dealerMap[d.id] = { name: d.name, total: 0 }; });
-        
-        // Type Stats
-        const typeStats = {
-            '1 Digit Open': 0,
-            '1 Digit Close': 0,
-            '2 Digit': 0,
-            'Bulk Game': 0,
-            'Combo Game': 0
-        };
-        
-        // Player Stats
+        const typeStats = { '1 Digit Open': 0, '1 Digit Close': 0, '2 Digit': 0, 'Bulk Game': 0, 'Combo Game': 0 };
         const userMap = {};
-        
         bets.forEach(b => {
             if (dealerMap[b.dealerId]) dealerMap[b.dealerId].total += b.totalAmount;
             if (typeStats[b.subGameType] !== undefined) typeStats[b.subGameType] += b.totalAmount;
-            
             if (!userMap[b.userId]) {
                 const u = db.prepare('SELECT name FROM users WHERE id = ?').get(b.userId);
                 userMap[b.userId] = { name: u ? u.name : b.userId, total: 0 };
             }
             userMap[b.userId].total += b.totalAmount;
         });
-        
         return {
             dealerBookings: Object.entries(dealerMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total),
             typeBookings: Object.entries(typeStats).map(([type, total]) => ({ type, total })),
@@ -250,6 +354,9 @@ module.exports = {
                 const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
                 if (payout > 0) {
                     db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, user.id);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                        uuidv4(), user.id, 'USER', new Date().toISOString(), `Winning Payout: ${game.name}`, 0, payout, user.wallet + payout
+                    );
                 }
             });
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
