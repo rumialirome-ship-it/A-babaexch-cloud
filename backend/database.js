@@ -195,6 +195,22 @@ module.exports = {
             timestamp: new Date(b.timestamp)
         }));
     },
+    createDealer: (d) => {
+        const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
+        const wallet = parseFloat(d.wallet) || 0;
+        db.transaction(() => {
+            db.prepare(`INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                d.id, d.name, d.password, d.area || '', d.contact || '', wallet, d.commissionRate || 10, 
+                d.prizeRates ? JSON.stringify(d.prizeRates) : defaultPrizeRates
+            );
+            if (wallet > 0) {
+                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    uuidv4(), d.id, 'DEALER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
+                );
+            }
+        })();
+    },
     createUser: (u) => {
         const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
         const defaultBetLimits = JSON.stringify({ oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });

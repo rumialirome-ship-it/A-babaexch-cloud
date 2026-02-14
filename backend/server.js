@@ -66,8 +66,13 @@ app.get('/api/admin/bets/search', authMiddleware, (req, res) => {
 });
 
 app.post('/api/admin/dealers', authMiddleware, (req, res) => {
-    database.createUser({ ...req.body, wallet: req.body.wallet || 0, dealerId: 'admin' }); // Simple hack for demo
-    res.json({ success: true });
+    if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
+    try {
+        database.createDealer(req.body);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
 });
 
 app.put('/api/admin/dealers/:id', authMiddleware, (req, res) => {
