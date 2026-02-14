@@ -100,7 +100,6 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
 
 /**
  * Normalizes number for comparison (strips leading zeros)
- * FIXED: Now correctly handles "0" value.
  */
 const normNum = (n) => {
     if (n === undefined || n === null || n === '') return '';
@@ -112,27 +111,37 @@ const normNum = (n) => {
 const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     if (!winningNumber || winningNumber.includes('_')) return 0;
     
+    const winStr = String(winningNumber).trim();
+    const winNorm = normNum(winStr);
+    
+    // Auto-pad single digits for 2-digit logic comparison unless it's AKC
+    const paddedWin = (gameName !== 'AKC' && winStr.length === 1) ? '0' + winStr : winStr;
+
     let winningCount = 0;
     const nums = typeof bet.numbers === 'string' ? JSON.parse(bet.numbers) : bet.numbers;
-    const winNorm = normNum(winningNumber);
 
     nums.forEach(num => {
         const numNorm = normNum(num);
         if (bet.subGameType === '1 Digit Open') {
-            if (winningNumber.length >= 1 && numNorm === normNum(winningNumber[0])) winningCount++;
+            // Compare first digit
+            if (paddedWin.length >= 1 && numNorm === normNum(paddedWin[0])) winningCount++;
         } else if (bet.subGameType === '1 Digit Close') {
             if (gameName === 'AKC') {
                 if (numNorm === winNorm) winningCount++;
-            } else if (winningNumber.length === 2 && numNorm === normNum(winningNumber[1])) {
-                winningCount++;
+            } else {
+                // Compare second digit (index 1 of 2-digit padded string)
+                if (paddedWin.length === 2 && numNorm === normNum(paddedWin[1])) winningCount++;
             }
         } else {
+            // 2-Digit, Bulk, Combo
             if (numNorm === winNorm) winningCount++;
         }
     });
 
     if (winningCount === 0) return 0;
     const rates = typeof prizeRates === 'string' ? safeJsonParse(prizeRates) : prizeRates;
+    if (!rates) return 0;
+
     const rate = bet.subGameType === '1 Digit Open' ? (rates.oneDigitOpen || 0) : 
                 (bet.subGameType === '1 Digit Close' ? (rates.oneDigitClose || 0) : (rates.twoDigit || 0));
     
@@ -456,36 +465,48 @@ module.exports = {
         })();
     },
     getDetailedWinners: () => {
-        // Fetch all games with a valid winning number (no underscores)
-        const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL AND winningNumber != ""').all();
-        const validGames = games.filter(g => !g.winningNumber.includes('_'));
+        // Robust fetch: All bets joined with game, user, and dealer data where winning numbers exist
+        const winnersSql = `
+            SELECT b.*, g.name as gameName, g.winningNumber, u.name as userName, u.prizeRates, d.name as dealerName
+            FROM bets b
+            JOIN games g ON b.gameId = g.id
+            JOIN users u ON LOWER(b.userId) = LOWER(u.id)
+            JOIN dealers d ON LOWER(b.dealerId) = LOWER(d.id)
+            WHERE g.winningNumber IS NOT NULL AND g.winningNumber != '' AND g.winningNumber NOT LIKE '%\_%' ESCAPE '\\'
+        `;
         
+        const possibleWinners = db.prepare(winnersSql).all();
         const allWinners = [];
-        validGames.forEach(game => {
-            const gameBets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(game.id);
-            gameBets.forEach(bet => {
-                const user = db.prepare('SELECT * FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
-                if (!user) return;
-                
-                const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
-                if (payout > 0) {
-                    const dealer = db.prepare('SELECT name FROM dealers WHERE LOWER(id) = LOWER(?)').get(bet.dealerId);
-                    allWinners.push({ 
-                        id: bet.id, 
-                        userName: user.name, 
-                        userId: user.id, 
-                        dealerName: dealer ? dealer.name : 'Unknown',
-                        dealerId: bet.dealerId,
-                        gameName: game.name, 
-                        winningNumber: game.winningNumber, 
-                        payout: payout, 
-                        timestamp: bet.timestamp 
-                    });
-                }
-            });
+
+        possibleWinners.forEach(row => {
+            const payout = calculatePayout(
+                { subGameType: row.subGameType, numbers: row.numbers, amountPerNumber: row.amountPerNumber },
+                row.winningNumber,
+                row.gameName,
+                row.prizeRates
+            );
+
+            if (payout > 0) {
+                allWinners.push({
+                    id: row.id,
+                    userName: row.userName,
+                    userId: row.userId,
+                    dealerName: row.dealerName,
+                    dealerId: row.dealerId,
+                    gameName: row.gameName,
+                    winningNumber: row.winningNumber,
+                    payout: payout,
+                    timestamp: row.timestamp
+                });
+            }
         });
-        // Sort by newest winners first
-        return allWinners.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Sort descending: Newest first
+        return allWinners.sort((a, b) => {
+            const dateA = new Date(a.timestamp).getTime();
+            const dateB = new Date(b.timestamp).getTime();
+            return dateB - dateA;
+        });
     },
     getFinancialSummary: () => {
         const games = db.prepare('SELECT * FROM games').all();
@@ -598,7 +619,15 @@ module.exports = {
         };
     },
     updateGameDrawTime: (gameId, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, gameId),
-    declareWinner: (gameId, num) => db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(num, gameId),
+    declareWinner: (gameId, num) => {
+        const game = db.prepare('SELECT name FROM games WHERE id = ?').get(gameId);
+        let val = String(num).trim();
+        // Pad single digits for double digit games
+        if (game && game.name !== 'AKC' && val.length === 1 && val !== '') {
+            val = '0' + val;
+        }
+        return db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
+    },
     approvePayouts: (gameId) => {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
