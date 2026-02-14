@@ -104,7 +104,7 @@ const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                    {(entries || []).slice().reverse().map(entry => (
+                    {(entries || []).map(entry => (
                         <tr key={entry.id} className="hover:bg-cyan-500/5 transition-colors">
                             <td className="p-4 text-[10px] font-mono text-slate-400 whitespace-nowrap">{new Date(entry.timestamp).toLocaleString()}</td>
                             <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
@@ -304,15 +304,6 @@ const DealerForm: React.FC<{
             </div>
         </form>
     );
-};
-
-// Hidden as requested. Removed from render but kept logic in case needed for core functions.
-const QuickResultConsole: React.FC<{ 
-    games: Game[]; 
-    onSetResult: (gameId: string, val: string, isUpdate: boolean) => Promise<void>; 
-    onApprove: (gameId: string) => Promise<void>;
-}> = ({ games, onSetResult, onApprove }) => {
-    return null; // Hidden from view as per instructions
 };
 
 const BettingSheetView: React.FC<{ 
@@ -593,7 +584,6 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
     );
 };
 
-// --- UPDATED STAKESVIEW COMPONENT ---
 const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [loading, setLoading] = useState(true);
@@ -726,27 +716,27 @@ const WinnersView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <table className="w-full text-left min-w-[1000px]">
                         <thead className="bg-slate-800/80 border-b border-slate-700">
                             <tr>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Player</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Hit</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Prize Amount</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Player Identity</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Network Dealer</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Game Market</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Hit Number</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Prize Disbursed</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
                             {loading ? (
-                                <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Fetching winning data...</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs tracking-widest">Filtering Hits...</td></tr>
                             ) : winners.length === 0 ? (
-                                <tr><td colSpan={5} className="p-20 text-center text-slate-600 font-black uppercase text-xs">No recorded winners for this cycle</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center text-slate-600 font-black uppercase text-xs tracking-widest">No matching hits detected in this cycle</td></tr>
                             ) : winners.map(win => (
                                 <tr key={win.id} className="hover:bg-amber-500/5 transition-all group">
                                     <td className="p-4 border-l-4 border-transparent group-hover:border-amber-400">
                                         <div className="text-white font-black text-sm uppercase">{win.userName}</div>
-                                        <div className="text-[9px] text-slate-500 font-mono tracking-widest">{win.userId}</div>
+                                        <div className="text-[9px] text-slate-500 font-mono tracking-widest uppercase">{win.userId}</div>
                                     </td>
                                     <td className="p-4">
                                         <div className="text-sky-400 font-bold text-xs uppercase">{win.dealerName}</div>
-                                        <div className="text-[9px] text-slate-500 font-mono">{win.dealerId}</div>
+                                        <div className="text-[9px] text-slate-500 font-mono uppercase">{win.dealerId}</div>
                                     </td>
                                     <td className="p-4 text-slate-300 font-black uppercase text-xs">{win.gameName}</td>
                                     <td className="p-4 text-center">
@@ -774,6 +764,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
   const [pendingDeclareMap, setPendingDeclareMap] = useState<Record<string, boolean>>({});
   const [viewingUserLedgerFor, setViewingUserLedgerFor] = useState<User | null>(null);
+  const [viewingDealerLedgerFor, setViewingDealerLedgerFor] = useState<Dealer | null>(null);
   const [isDealerModalOpen, setIsDealerModalOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | undefined>(undefined);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
@@ -791,7 +782,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         } else {
             await declareWinner?.(gameId, val);
         }
-        // CRITICAL: Explicitly clear input and call refresh
         setWinnerInputMap(prev => { const next = { ...prev }; delete next[gameId]; return next; });
         if (onRefreshData) {
             await onRefreshData();
@@ -802,6 +792,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
         setPendingDeclareMap(prev => ({ ...prev, [gameId]: false }));
     }
+  };
+
+  const handleManualPayout = async (gameId: string) => {
+      if (!window.confirm("Disburse prize funds to all winners for this market?")) return;
+      try {
+          await approvePayouts?.(gameId);
+          if (onRefreshData) onRefreshData();
+          alert("Prizes credited to user accounts successfully.");
+      } catch (e) {
+          alert("Payout execution failed.");
+      }
   };
 
   const adjustDrawTime = async (gameId: string, currentDrawTime: string, deltaMinutes: number) => {
@@ -931,8 +932,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                       </td>
                                       <td className="p-4 text-xs font-mono text-emerald-400 font-black">Rs {d.wallet.toLocaleString()}</td>
                                       <td className="p-4 text-right">
-                                          <div className="flex justify-end gap-3">
-                                              <button onClick={() => { setSelectedDealer(d); setIsDealerModalOpen(true); }} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline">Edit</button>
+                                          <div className="flex justify-end gap-3 items-center">
+                                              <button onClick={() => setViewingDealerLedgerFor(d)} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline">Audit Ledger</button>
+                                              <button onClick={() => { setSelectedDealer(d); setIsDealerModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white">Edit</button>
                                               <button onClick={() => toggleAccountRestriction?.(d.id, 'dealer')} className={`text-[10px] font-black uppercase tracking-widest transition-all ${d.isRestricted ? 'text-red-500' : 'text-emerald-500'}`}>
                                                   {d.isRestricted ? 'Unlock' : 'Lock'}
                                               </button>
@@ -949,7 +951,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'games' && (
         <div className="animate-fade-in space-y-10">
-            {/* Market Detail Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {games.map(game => {
                     const isEditingResult = editingWinnerMap[game.id];
@@ -1019,12 +1020,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <div className="flex flex-col gap-2">
                                     {game.payoutsApproved ? (
                                         <div className="flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center shadow-inner">
-                                            <span className="text-xs">✓</span> Prizes Auto-Disbursed
+                                            <span className="text-xs">✓</span> Prizes Disbursed
                                         </div>
-                                    ) : game.winningNumber ? (
-                                         <div className="flex items-center justify-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center">
-                                            Processing Payouts...
-                                        </div>
+                                    ) : game.winningNumber && !game.winningNumber.endsWith('_') ? (
+                                         <button 
+                                            onClick={() => handleManualPayout(game.id)}
+                                            className="flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 border border-amber-500/30 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg active:scale-95 transition-all"
+                                         >
+                                            Pay Amount to Winner
+                                        </button>
                                     ) : (
                                         <div className="flex items-center justify-center gap-2 bg-slate-900/50 border border-slate-800 text-slate-500 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center">
                                             Awaiting Declaration
@@ -1042,6 +1046,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {viewingUserLedgerFor && (
           <Modal isOpen={!!viewingUserLedgerFor} onClose={() => setViewingUserLedgerFor(null)} title={`Ledger Audit: ${viewingUserLedgerFor.name}`} size="xl" themeColor="cyan">
               <LedgerTable entries={viewingUserLedgerFor.ledger} />
+          </Modal>
+      )}
+
+      {viewingDealerLedgerFor && (
+          <Modal isOpen={!!viewingDealerLedgerFor} onClose={() => setViewingDealerLedgerFor(null)} title={`Dealer Audit: ${viewingDealerLedgerFor.name}`} size="xl" themeColor="emerald">
+              <LedgerTable entries={viewingDealerLedgerFor.ledger} />
           </Modal>
       )}
 
