@@ -94,7 +94,6 @@ app.put('/api/admin/users/:id', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
-// Admin Draw Time Management
 app.put('/api/admin/games/:id/draw-time', authMiddleware, (req, res) => {
     if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
     const { newDrawTime } = req.body;
@@ -153,37 +152,41 @@ app.post('/api/dealer/bets/bulk', authMiddleware, (req, res) => {
     }
 });
 
+// Dealer TOPUP User: Debit Dealer, Credit User
 app.post('/api/dealer/topup/user', authMiddleware, (req, res) => {
     try {
-        const balance = database.updateWallet(req.body.userId, 'users', req.body.amount, 'credit', req.user.id);
-        res.json({ success: true, balance });
+        const result = database.transferFunds(req.user.id, 'dealers', req.body.userId, 'users', req.body.amount, 'Dealer Network Top-up');
+        res.json({ success: true, balance: result.receiverBalance });
     } catch (e) {
         res.status(400).json({ message: e.message });
     }
 });
 
+// Dealer WITHDRAW from User: Debit User, Credit Dealer
 app.post('/api/dealer/withdraw/user', authMiddleware, (req, res) => {
     try {
-        const balance = database.updateWallet(req.body.userId, 'users', req.body.amount, 'debit', req.user.id);
-        res.json({ success: true, balance });
+        const result = database.transferFunds(req.body.userId, 'users', req.user.id, 'dealers', req.body.amount, 'Dealer Network Withdrawal');
+        res.json({ success: true, balance: result.senderBalance });
     } catch (e) {
         res.status(400).json({ message: e.message });
     }
 });
 
+// Admin TOPUP Dealer: Debit Admin, Credit Dealer
 app.post('/api/admin/topup/dealer', authMiddleware, (req, res) => {
     try {
-        const balance = database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'credit', req.user.id);
-        res.json({ success: true, balance });
+        const result = database.transferFunds(req.user.id, 'admins', req.body.dealerId, 'dealers', req.body.amount, 'Admin System Funding');
+        res.json({ success: true, balance: result.receiverBalance });
     } catch (e) {
         res.status(400).json({ message: e.message });
     }
 });
 
+// Admin WITHDRAW from Dealer: Debit Dealer, Credit Admin
 app.post('/api/admin/withdraw/dealer', authMiddleware, (req, res) => {
     try {
-        const balance = database.updateWallet(req.body.dealerId, 'dealers', req.body.amount, 'debit', req.user.id);
-        res.json({ success: true, balance });
+        const result = database.transferFunds(req.body.dealerId, 'dealers', req.user.id, 'admins', req.body.amount, 'Admin System Recovery');
+        res.json({ success: true, balance: result.senderBalance });
     } catch (e) {
         res.status(400).json({ message: e.message });
     }
