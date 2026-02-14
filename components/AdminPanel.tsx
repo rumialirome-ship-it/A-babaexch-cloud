@@ -312,20 +312,6 @@ const QuickResultConsole: React.FC<{
     onSetResult: (gameId: string, val: string, isUpdate: boolean) => Promise<void>; 
     onApprove: (gameId: string) => Promise<void>;
 }> = ({ games, onSetResult, onApprove }) => {
-    const [inputs, setInputs] = useState<Record<string, string>>({});
-    const [loading, setLoading] = useState<Record<string, boolean>>({});
-
-    const handleAction = async (game: Game) => {
-        const val = inputs[game.id] || game.winningNumber || '';
-        if (!val) return;
-        setLoading(prev => ({ ...prev, [game.id]: true }));
-        try {
-            await onSetResult(game.id, val, !!game.winningNumber);
-        } finally {
-            setLoading(prev => ({ ...prev, [game.id]: false }));
-        }
-    };
-
     return null; // Hidden from view as per instructions
 };
 
@@ -800,15 +786,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setPendingDeclareMap(prev => ({ ...prev, [gameId]: true }));
     setEditingWinnerMap(prev => ({ ...prev, [gameId]: false }));
     try {
-        if (isUpdate) await updateWinner?.(gameId, val);
-        else await declareWinner?.(gameId, val);
+        if (isUpdate) {
+            await updateWinner?.(gameId, val);
+        } else {
+            await declareWinner?.(gameId, val);
+        }
+        // CRITICAL: Explicitly clear input and call refresh
         setWinnerInputMap(prev => { const next = { ...prev }; delete next[gameId]; return next; });
+        if (onRefreshData) {
+            await onRefreshData();
+        }
     } catch (error) {
         alert("Operation Failed.");
         setEditingWinnerMap(prev => ({ ...prev, [gameId]: true }));
     } finally {
         setPendingDeclareMap(prev => ({ ...prev, [gameId]: false }));
-        onRefreshData?.();
     }
   };
 
@@ -822,6 +814,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       const formattedTime = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
       try {
           await updateGameDrawTime?.(gameId, formattedTime);
+          if (onRefreshData) await onRefreshData();
       } catch (e) {
           alert("Time update failed.");
       }
@@ -960,7 +953,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <QuickResultConsole 
                 games={games} 
                 onSetResult={(id, val, isUpdate) => handleDeclareAction(id, val, isUpdate)} 
-                onApprove={async (id) => { await approvePayouts?.(id); onRefreshData?.(); }}
+                onApprove={async (id) => { await approvePayouts?.(id); if (onRefreshData) await onRefreshData(); }}
             />
 
             {/* Market Detail Cards */}
@@ -988,7 +981,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                                         onChange={(e) => setTempTime(e.target.value)}
                                                         className="bg-transparent border-none text-[10px] text-white font-bold focus:ring-0 p-0 w-20"
                                                     />
-                                                    <button onClick={async () => { await updateGameDrawTime?.(game.id, tempTime); setEditingTimeId(null); }} className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black">✓</button>
+                                                    <button onClick={async () => { await updateGameDrawTime?.(game.id, tempTime); setEditingTimeId(null); if (onRefreshData) await onRefreshData(); }} className="text-emerald-400 hover:text-emerald-300 text-[10px] font-black">✓</button>
                                                     <button onClick={() => setEditingTimeId(null)} className="text-rose-400 hover:text-rose-300 text-[10px] font-black">✕</button>
                                                 </div>
                                             ) : (
@@ -1032,7 +1025,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
                                 <div className="flex gap-2">
                                     {game.winningNumber && !game.payoutsApproved && (
-                                        <button onClick={() => approvePayouts?.(game.id)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/30 transition-all active:scale-95">Verify & Pay All</button>
+                                        <button onClick={async () => { await approvePayouts?.(game.id); if (onRefreshData) await onRefreshData(); }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/30 transition-all active:scale-95">Verify & Pay All</button>
                                     )}
                                     {game.payoutsApproved && (
                                         <div className="flex-1 bg-slate-900/50 text-slate-500 border border-slate-800 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center italic">Verified Batch Paid</div>
@@ -1060,7 +1053,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             onSave={async (d, o) => {
                 await onSaveDealer?.(d, o);
                 setIsDealerModalOpen(false);
-                onRefreshData?.();
+                if (onRefreshData) await onRefreshData();
             }}
           />
       </Modal>
