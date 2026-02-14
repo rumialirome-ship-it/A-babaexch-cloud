@@ -135,7 +135,6 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
   }, [users, searchQuery]);
 
   const handleCopyBet = (bet: Bet) => {
-    // Exact requested format: "30 rs10" (Number rsAmount) listed vertically
     const formatted = bet.numbers.map(num => `${num} rs${bet.amountPerNumber}`).join('\n');
     navigator.clipboard.writeText(formatted);
     showToast("Ticket copied vertically!", "success");
@@ -295,7 +294,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
       )}
 
       <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title={selectedUser ? "Modify Account" : "Register New Player"} themeColor="emerald">
-          <UserForm user={selectedUser} users={users} onSave={onSaveUser} onCancel={() => setIsUserModalOpen(false)} dealerPrizeRates={dealer.prizeRates} dealerId={dealer.id} showToast={showToast} />
+          <UserForm user={selectedUser} onSave={async (u, o, i) => { await onSaveUser(u, o, i); setIsUserModalOpen(false); showToast(selectedUser ? "Account Updated" : "Account Created", "success"); }} onCancel={() => setIsUserModalOpen(false)} dealerPrizeRates={dealer.prizeRates} />
       </Modal>
 
       <Modal isOpen={isTopUpModalOpen} onClose={() => setIsTopUpModalOpen(false)} title="Internal Wallet Funding" themeColor="emerald">
@@ -315,7 +314,131 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
   );
 };
 
-// Sub-components...
+const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number) => Promise<void>, onCancel: () => void, dealerPrizeRates: PrizeRates }> = ({ user, onSave, onCancel, dealerPrizeRates }) => {
+    const [name, setName] = useState(user?.name || '');
+    const [id, setId] = useState(user?.id || '');
+    const [password, setPassword] = useState(user?.password || '');
+    const [area, setArea] = useState(user?.area || '');
+    const [contact, setContact] = useState(user?.contact || '');
+    const [commissionRate, setCommissionRate] = useState(user?.commissionRate || 5);
+    const [initialDeposit, setInitialDeposit] = useState(0);
+    const [prizeRates, setPrizeRates] = useState<PrizeRates>(user?.prizeRates || dealerPrizeRates);
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const userData = { name, id, password, area, contact, commissionRate, prizeRates };
+            await onSave(userData, user?.id, initialDeposit);
+        } catch (e: any) {
+            alert(e.message || "Operation failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Full Name</label>
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Account ID</label>
+                    <input type="text" value={id} onChange={e => setId(e.target.value)} required disabled={!!user} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500 disabled:opacity-50" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Access Password</label>
+                    <input type="text" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                </div>
+                {!user && (
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Opening Deposit</label>
+                        <input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                )}
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Commission %</label>
+                    <input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Area / Location</label>
+                    <input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800">
+                <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest">Rate Protocols</h4>
+                <div className="grid grid-cols-3 gap-2">
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit Open</label>
+                        <input type="number" value={prizeRates.oneDigitOpen} onChange={e => setPrizeRates({...prizeRates, oneDigitOpen: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit Close</label>
+                        <input type="number" value={prizeRates.oneDigitClose} onChange={e => setPrizeRates({...prizeRates, oneDigitClose: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">2-Digit</label>
+                        <input type="number" value={prizeRates.twoDigit} onChange={e => setPrizeRates({...prizeRates, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                <button type="submit" disabled={loading} className="flex-2 px-12 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-900/20 active:scale-95 transition-all">
+                    {loading ? 'Saving...' : user ? 'Apply Changes' : 'Confirm Registration'}
+                </button>
+            </div>
+        </form>
+    );
+};
+
+const UserTransactionForm: React.FC<{ type: string, users: User[], onTransaction: (u: string, a: number) => Promise<void>, onCancel: () => void }> = ({ type, users, onTransaction, onCancel }) => {
+    const [userId, setUserId] = useState('');
+    const [amount, setAmount] = useState(0);
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userId || amount <= 0) return;
+        setLoading(true);
+        try {
+            await onTransaction(userId, amount);
+        } catch (e: any) {
+            alert(e.message || "Transaction failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Target Account</label>
+                    <select value={userId} onChange={e => setUserId(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm font-black uppercase focus:ring-1 focus:ring-emerald-500">
+                        <option value="">Select User Profile...</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.id}) - Rs {u.wallet.toLocaleString()}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Amount (PKR)</label>
+                    <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} required min="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-lg font-mono font-black focus:ring-1 focus:ring-emerald-500" placeholder="0.00" />
+                </div>
+            </div>
+            <div className="flex gap-3">
+                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black text-xs uppercase tracking-widest">Abort</button>
+                <button type="submit" disabled={loading || !userId || amount <= 0} className={`flex-2 px-12 py-3 ${type === 'Withdrawal' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all disabled:opacity-50`}>
+                    {loading ? 'Processing...' : `Execute ${type}`}
+                </button>
+            </div>
+        </form>
+    );
+};
 
 const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDealer: (details: any) => Promise<void> }> = ({ users, games, placeBetAsDealer }) => {
     const [selectedUserId, setSelectedUserId] = useState('');
@@ -372,8 +495,5 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
         </div>
     );
 };
-
-const UserForm = (props: any) => { return <div className="text-slate-400 p-4">Integrated Profile Form Active</div>; };
-const UserTransactionForm = (props: any) => { return <div className="text-slate-400 p-4">Integrated Finance Form Active</div>; };
 
 export default DealerPanel;

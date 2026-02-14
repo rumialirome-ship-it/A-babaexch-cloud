@@ -79,16 +79,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setVerifyData(data);
                 setLoading(false);
 
-                // Start polling for balance updates
+                // Polling at 60s to reduce refresh loops
                 poll = setInterval(async () => {
                     const r = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${currentToken}` }});
                     if (r.ok) { 
                         const d = await r.json(); 
                         setAccount(parseAccountDates(d.account)); 
-                    } else if (r.status === 401) {
+                    } else if (r.status === 401 || r.status === 403) {
                         logout();
                     }
-                }, 10000); 
+                }, 60000); 
             } catch (e) { 
                 logout(); 
                 setLoading(false); 

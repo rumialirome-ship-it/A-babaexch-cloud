@@ -15,7 +15,11 @@ const TENSION_PHRASES = [
     "FINALIZING PATH...",
     "ORACLE SPEAKING...",
     "BRACING...",
-    "LOCKING IN..."
+    "LOCKING IN...",
+    "CALIBRATING RESULTS...",
+    "VERIFYING INTEGRITY...",
+    "ALMOST THERE...",
+    "NUMBERS ALIGNING..."
 ];
 
 const Confetti: React.FC = () => {
@@ -61,8 +65,8 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
   const [elapsed, setElapsed] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
 
-  // High-speed reveal: 5 seconds total
-  const TOTAL_ROLL_TIME = 5000; 
+  // Set to 30 seconds exactly
+  const TOTAL_ROLL_TIME = 30000; 
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -77,10 +81,9 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
         setDisplayNum(randomNum);
       }, 30);
 
-      // Fast phrases: cycle every 600ms to fit all 8 into 5s
       phraseInterval = setInterval(() => {
         setPhraseIndex(prev => (prev + 1) % TENSION_PHRASES.length);
-      }, 600);
+      }, 2500);
 
       progressInterval = setInterval(() => {
         setElapsed(prev => prev + 50);
@@ -110,13 +113,11 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
 
   return (
     <div className={`fixed inset-0 z-[1000] flex flex-col items-center overflow-y-auto overflow-x-hidden bg-slate-950 transition-all duration-700 py-10 md:justify-center ${isShaking ? 'animate-shake scale-105' : ''}`}>
-      
-      {/* Background Effects */}
       <div className="fixed inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
         <div 
             className="w-[300vw] h-[300vw] opacity-40 animate-spotlight"
             style={{ 
-                animationDuration: `${8 - (intensity * 6)}s`,
+                animationDuration: `${12 - (intensity * 8)}s`,
                 background: `conic-gradient(from 0deg, 
                     transparent 0deg, 
                     rgba(6,182,212,0.3) 20deg, 
@@ -131,7 +132,6 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
       </div>
 
       {showFlash && <div className="fixed inset-0 bg-white z-[1100]"></div>}
-
       {phase === 'REVEAL' && <Confetti />}
 
       <div className="relative z-[1010] text-center px-4 w-full max-w-4xl flex flex-col items-center">
@@ -139,19 +139,23 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
             <h2 className={`text-lg md:text-3xl font-black tracking-[0.4em] uppercase transition-all duration-500 ${phase === 'REVEAL' ? 'text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'text-white/90'}`}>
                 {phase === 'REVEAL' ? '✨ RESULT DECLARED ✨' : TENSION_PHRASES[phraseIndex]}
             </h2>
-            <div className="h-1.5 w-48 md:w-80 mx-auto mt-4 bg-slate-800 rounded-full overflow-hidden border border-white/10">
+            <div className="h-2 w-64 md:w-96 mx-auto mt-4 bg-slate-800 rounded-full overflow-hidden border border-white/10">
                 <div 
                     className={`h-full transition-all duration-50 ease-linear ${intensity > 0.8 ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-cyan-500 to-blue-500'}`} 
                     style={{ width: phase === 'REVEAL' ? '100%' : `${intensity * 100}%` }}
                 ></div>
             </div>
+            {phase === 'ROLLING' && (
+                <div className="text-[10px] font-mono text-slate-500 mt-2 tracking-widest uppercase">
+                    Secs Remaining: {Math.max(0, Math.ceil((TOTAL_ROLL_TIME - elapsed) / 1000))}s
+                </div>
+            )}
         </div>
 
         <h1 className={`text-5xl md:text-8xl font-black uppercase tracking-tighter mb-8 transition-all duration-500 ${phase === 'REVEAL' ? 'text-white scale-110' : 'text-slate-600'}`}>
           {gameName}
         </h1>
 
-        {/* The Orb */}
         <div className="relative inline-block">
             <div className={`absolute -inset-10 md:-inset-16 rounded-full blur-[50px] transition-all duration-500 ${phase === 'REVEAL' ? 'bg-amber-500/60 scale-110' : intensity > 0.8 ? 'bg-orange-600/40 animate-pulse' : 'bg-cyan-500/30'}`}></div>
             
@@ -172,7 +176,6 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
             </div>
         </div>
 
-        {/* Action Button */}
         <div className="mt-12 h-auto min-h-[10rem] flex flex-col items-center justify-center z-[1200]">
           {phase === 'REVEAL' ? (
             <div className="animate-reveal-slam-intense flex flex-col items-center">

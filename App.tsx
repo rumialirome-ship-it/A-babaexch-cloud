@@ -124,27 +124,27 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         fetchPublicData();
-        const interval = setInterval(fetchPublicData, 20000);
+        const interval = setInterval(fetchPublicData, 90000); // 90s public poll
         return () => clearInterval(interval);
     }, [fetchPublicData]);
 
     useEffect(() => {
         if (role) {
-            if (!hasInitialFetched) fetchPrivateData();
-            const interval = setInterval(fetchPrivateData, 15000);
+            // Decoupled initial fetch from interval to prevent re-trigger loop
+            fetchPrivateData();
+            const interval = setInterval(fetchPrivateData, 75000); // 75s private poll
             return () => clearInterval(interval);
         } else {
             setHasInitialFetched(false);
             setUsers([]); setBets([]); setDealers([]);
         }
-    }, [role, fetchPrivateData, hasInitialFetched]);
+    }, [role, fetchPrivateData]); // Removed hasInitialFetched from dependencies
 
     useEffect(() => {
         if (games.length > 0 && lastGamesRef.current.length > 0) {
             const revealEligibleGames = ['Ali Baba', 'OLA TV', 'OYO TV'];
             games.forEach(newGame => {
                 const oldGame = lastGamesRef.current.find(g => g.id === newGame.id);
-                // Trigger reveal ONLY if winning number is newly added AND game is in the whitelist
                 if (
                     revealEligibleGames.includes(newGame.name) &&
                     newGame.winningNumber && 
