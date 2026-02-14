@@ -221,6 +221,71 @@ module.exports = {
             timestamp: new Date(b.timestamp)
         }));
     },
+    getNumberSummary: (filters) => {
+        const { date, gameId, dealerId, query } = filters;
+        let sql = 'SELECT * FROM bets WHERE 1=1';
+        const params = [];
+
+        if (date) {
+            sql += ' AND timestamp LIKE ?';
+            params.push(`${date}%`);
+        }
+        if (gameId) {
+            sql += ' AND gameId = ?';
+            params.push(gameId);
+        }
+        if (dealerId) {
+            sql += ' AND dealerId = ?';
+            params.push(dealerId);
+        }
+
+        const bets = db.prepare(sql).all(...params);
+        
+        const gameBreakdownMap = {};
+        const twoDigitMap = {};
+        const oneOpenMap = {};
+        const oneCloseMap = {};
+
+        // Pre-fetch all games for names
+        const allGames = db.prepare('SELECT id, name FROM games').all();
+        const gameNames = {};
+        allGames.forEach(g => gameNames[g.id] = g.name);
+
+        bets.forEach(b => {
+            const nums = safeJsonParse(b.numbers);
+            const stake = b.amountPerNumber;
+
+            // Market breakdown
+            const gName = gameNames[b.gameId] || 'Unknown';
+            gameBreakdownMap[gName] = (gameBreakdownMap[gName] || 0) + b.totalAmount;
+
+            nums.forEach(n => {
+                // Apply optional number search filter
+                if (query && !n.includes(query)) return;
+
+                if (b.subGameType === '2 Digit' || b.subGameType === 'Bulk Game' || b.subGameType === 'Combo Game') {
+                    twoDigitMap[n] = (twoDigitMap[n] || 0) + stake;
+                } else if (b.subGameType === '1 Digit Open') {
+                    oneOpenMap[n] = (oneOpenMap[n] || 0) + stake;
+                } else if (b.subGameType === '1 Digit Close') {
+                    oneCloseMap[n] = (oneCloseMap[n] || 0) + stake;
+                }
+            });
+        });
+
+        const sortMap = (map) => Object.entries(map)
+            .map(([num, total]) => ({ number: num, total }))
+            .sort((a, b) => b.total - a.total);
+
+        return {
+            gameBreakdown: Object.entries(gameBreakdownMap)
+                .map(([name, total]) => ({ name, total }))
+                .sort((a, b) => b.total - a.total),
+            twoDigit: sortMap(twoDigitMap),
+            oneDigitOpen: sortMap(oneOpenMap),
+            oneDigitClose: sortMap(oneCloseMap)
+        };
+    },
     createDealer: (d) => {
         const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
         const wallet = parseFloat(d.wallet) || 0;

@@ -59,6 +59,11 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
 app.get('/api/admin/summary', authMiddleware, (req, res) => res.json(database.getFinancialSummary()));
 app.get('/api/admin/detailed-winners', authMiddleware, (req, res) => res.json(database.getDetailedWinners()));
 app.get('/api/admin/live-stats', authMiddleware, (req, res) => res.json(database.getLiveStats()));
+app.get('/api/admin/number-summary', authMiddleware, (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
+    res.json(database.getNumberSummary(req.query));
+});
+
 app.get('/api/admin/export', authMiddleware, (req, res) => {
     if (req.user.role !== 'ADMIN') return res.status(403).json({ message: 'Forbidden' });
     res.json(database.exportDatabaseState());

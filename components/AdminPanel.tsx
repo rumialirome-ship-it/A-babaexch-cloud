@@ -49,6 +49,13 @@ interface LiveStats {
     }[];
 }
 
+interface NumberSummaryData {
+    gameBreakdown: { name: string, total: number }[];
+    twoDigit: { number: string, total: number }[];
+    oneDigitOpen: { number: string, total: number }[];
+    oneDigitClose: { number: string, total: number }[];
+}
+
 interface AdminPanelProps {
   admin: Admin;
   dealers: Dealer[];
@@ -247,6 +254,143 @@ const BettingSheetView: React.FC<{
                     </table>
                 </div>
             </div>
+        </div>
+    );
+};
+
+const NumberSummaryView: React.FC<{ 
+    games: Game[]; 
+    dealers: Dealer[];
+    fetchWithAuth: any;
+}> = ({ games, dealers, fetchWithAuth }) => {
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [gameId, setGameId] = useState('');
+    const [dealerId, setDealerId] = useState('');
+    const [query, setQuery] = useState('');
+    const [data, setData] = useState<NumberSummaryData | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (date) params.append('date', date);
+            if (gameId) params.append('gameId', gameId);
+            if (dealerId) params.append('dealerId', dealerId);
+            if (query) params.append('query', query);
+
+            const res = await fetchWithAuth(`/api/admin/number-summary?${params.toString()}`);
+            if (res.ok) setData(await res.json());
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { loadData(); }, [date, gameId, dealerId, query]);
+
+    return (
+        <div className="space-y-8 animate-fade-in">
+            {/* Filter Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold focus:ring-2 focus:ring-cyan-500" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</label>
+                    <select value={gameId} onChange={e => setGameId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold uppercase focus:ring-2 focus:ring-cyan-500">
+                        <option value="">All Games</option>
+                        {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer</label>
+                    <select value={dealerId} onChange={e => setDealerId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold uppercase focus:ring-2 focus:ring-cyan-500">
+                        <option value="">All Dealers</option>
+                        {dealers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Filter by Number</label>
+                    <input type="text" placeholder="e.g. 68" value={query} onChange={e => setQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-xs font-bold focus:ring-2 focus:ring-cyan-500" />
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs tracking-widest">Recalculating Ledger Summary...</div>
+            ) : !data ? null : (
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+                    {/* Market Breakdown */}
+                    <div className="space-y-6">
+                        <h4 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+                             Game Stake Breakdown
+                        </h4>
+                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl">
+                             <div className="divide-y divide-slate-800">
+                                {data.gameBreakdown.map(g => (
+                                    <div key={g.name} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors">
+                                        <div className="text-xs font-black text-slate-400 uppercase">{g.name}</div>
+                                        <div className="text-sm font-black text-white font-mono">Rs {g.total.toLocaleString()}</div>
+                                    </div>
+                                ))}
+                                {data.gameBreakdown.length === 0 && (
+                                    <div className="p-8 text-center text-slate-600 uppercase text-[10px] font-black">No volume</div>
+                                )}
+                             </div>
+                        </div>
+                    </div>
+
+                    {/* Main Number Grid */}
+                    <div className="lg:col-span-3 space-y-10">
+                        {/* 2 Digit Section */}
+                        <div className="space-y-6">
+                            <h4 className="text-xl font-black text-sky-400 uppercase tracking-widest">2 Digit Stakes</h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                                {data.twoDigit.map(item => (
+                                    <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center group hover:border-sky-500/50 transition-all shadow-lg">
+                                        <span className="text-2xl font-black text-white font-mono">{item.number}</span>
+                                        <span className="text-[11px] font-black text-sky-400 font-mono">Rs {item.total.toLocaleString()}</span>
+                                    </div>
+                                ))}
+                                {data.twoDigit.length === 0 && (
+                                    <div className="col-span-full py-12 text-center text-slate-600 uppercase text-xs font-black border border-dashed border-slate-700 rounded-2xl">No 2-digit bookings</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 1 Digit Sections */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-6">
+                                <h4 className="text-xl font-black text-emerald-400 uppercase tracking-widest">1 Digit Open</h4>
+                                <div className="space-y-2">
+                                    {data.oneDigitOpen.map(item => (
+                                        <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center hover:border-emerald-500/50 transition-all shadow-lg">
+                                            <span className="text-2xl font-black text-white font-mono">{item.number}</span>
+                                            <span className="text-[11px] font-black text-emerald-400 font-mono">Rs {item.total.toLocaleString()}</span>
+                                        </div>
+                                    ))}
+                                    {data.oneDigitOpen.length === 0 && (
+                                        <div className="py-8 text-center text-slate-600 uppercase text-[10px] font-black">No Open bookings</div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-6">
+                                <h4 className="text-xl font-black text-rose-400 uppercase tracking-widest">1 Digit Close</h4>
+                                <div className="space-y-2">
+                                    {data.oneDigitClose.map(item => (
+                                        <div key={item.number} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700 flex justify-between items-center hover:border-rose-500/50 transition-all shadow-lg">
+                                            <span className="text-2xl font-black text-white font-mono">{item.number}</span>
+                                            <span className="text-[11px] font-black text-rose-400 font-mono">Rs {item.total.toLocaleString()}</span>
+                                        </div>
+                                    ))}
+                                    {data.oneDigitClose.length === 0 && (
+                                        <div className="py-8 text-center text-slate-600 uppercase text-[10px] font-black">No Close bookings</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -750,7 +894,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                                     <td className="p-4 text-right font-mono text-sky-400 text-xs">{game.userCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-emerald-400 text-xs">{game.dealerCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-rose-400 text-xs">{game.totalPayouts.toFixed(2)}</td>
-                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         Rs {game.netProfit.toLocaleString()}
                                     </td>
                                 </tr>
@@ -881,6 +1025,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Stats' },
     { id: 'live', label: 'Live' },
+    { id: 'numbersummary', label: 'Summary' },
     { id: 'ledgers', label: 'Ledgers' },
     { id: 'bettingsheet', label: 'Sheet' },
     { id: 'games', label: 'Markets' },
@@ -904,6 +1049,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'live' && <LiveView fetchWithAuth={fetchWithAuth} />}
+      {activeTab === 'numbersummary' && (
+          <NumberSummaryView 
+            games={games} 
+            dealers={dealers} 
+            fetchWithAuth={fetchWithAuth} 
+          />
+      )}
       {activeTab === 'ledgers' && (
           <LedgersView 
             admin={admin} 
