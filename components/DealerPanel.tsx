@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType } from '../types';
 import { Icons } from '../constants';
@@ -446,27 +447,75 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
     const [isLoading, setIsLoading] = useState(false);
 
     const handleProcessBets = async () => {
-        if (!selectedUserId || !selectedGameId || !bulkInput) return;
+        if (!selectedUserId || !selectedGameId || !bulkInput.trim()) return;
         setIsLoading(true);
         try {
             const lines = bulkInput.split('\n').filter(l => l.trim());
-            const betGroups: any[] = [];
+            const betGroupsMap = new Map(); // Use map to group by subGameType and stake
+
+            const currentGame = games.find(g => g.id === selectedGameId);
+            const isAkcGame = currentGame?.name === 'AKC';
+            const delimiterRegex = /[-.,_*\/+<>=%;'\s]+/;
+
             lines.forEach(line => {
-                const stakeMatch = line.match(/(?:rs|r)?\s*(\d+\.?\d*)$/i);
+                let currentLine = line.trim();
+                const stakeMatch = currentLine.match(/(?:rs|r)?\s*(\d+\.?\d*)$/i);
                 const stake = stakeMatch ? parseFloat(stakeMatch[1]) : 0;
                 if (stake <= 0) return;
-                const numbersPart = line.substring(0, stakeMatch!.index).trim();
-                const numbers = numbersPart.split(/[-.,\s]+/).filter(n => n.length > 0);
-                if (numbers.length > 0) {
-                    betGroups.push({ subGameType: SubGameType.TwoDigit, numbers, amountPerNumber: stake });
-                }
+
+                let betPart = currentLine.substring(0, stakeMatch!.index).trim();
+                const isCombo = /\b(k|combo)\b/i.test(betPart);
+                betPart = betPart.replace(/\b(k|combo)\b/i, '').trim();
+                const tokens = betPart.split(delimiterRegex).filter(Boolean);
+
+                const determineType = (token: string): SubGameType | null => {
+                    if (isAkcGame) return /^[xX]?\d$/.test(token) ? SubGameType.OneDigitClose : null;
+                    if (/^\d{1,2}$/.test(token)) return SubGameType.TwoDigit;
+                    if (/^\d[xX]$/i.test(token)) return SubGameType.OneDigitOpen;
+                    if (/^[xX]\d$/i.test(token)) return SubGameType.OneDigitClose;
+                    return null;
+                };
+
+                tokens.forEach(token => {
+                    if (isCombo) {
+                        const digits = token.replace(/\D/g, '');
+                        const uniqueDigits = [...new Set(digits.split(''))];
+                        if (uniqueDigits.length >= 3 && uniqueDigits.length <= 6) {
+                            for (let i = 0; i < uniqueDigits.length; i++) {
+                                for (let j = 0; j < uniqueDigits.length; j++) {
+                                    if (i !== j) {
+                                        const num = uniqueDigits[i] + uniqueDigits[j];
+                                        const key = `Combo__${stake}`;
+                                        if (!betGroupsMap.has(key)) betGroupsMap.set(key, { subGameType: SubGameType.Combo, numbers: [], amountPerNumber: stake });
+                                        betGroupsMap.get(key).numbers.push(num);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        const type = determineType(token);
+                        if (type) {
+                            let val = token;
+                            if (type === SubGameType.TwoDigit) val = token.padStart(2, '0');
+                            else if (type === SubGameType.OneDigitOpen) val = token[0];
+                            else val = token.length === 2 ? token[1] : token[0];
+
+                            const key = `${type}__${stake}`;
+                            if (!betGroupsMap.has(key)) betGroupsMap.set(key, { subGameType: type, numbers: [], amountPerNumber: stake });
+                            betGroupsMap.get(key).numbers.push(val);
+                        }
+                    }
+                });
             });
-            if (betGroups.length === 0) throw new Error("Invalid terminal format");
+
+            const betGroups = Array.from(betGroupsMap.values());
+            if (betGroups.length === 0) throw new Error("No valid tokens found in terminal input");
+
             await placeBetAsDealer({ userId: selectedUserId, gameId: selectedGameId, betGroups });
             setBulkInput('');
             alert("Terminal batch processed successfully");
         } catch (error: any) {
-            alert(error.message);
+            alert(error.message || "Processing failed");
         } finally {
             setIsLoading(false);
         }
@@ -485,7 +534,7 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
                     {(games || []).filter(g => g.isMarketOpen).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
             </div>
-            <textarea rows={8} value={bulkInput} onChange={e => setBulkInput(e.target.value)} placeholder="Entry Format Example:&#10;14, 25 50&#10;88, 91 100" className="w-full bg-slate-900 text-white p-4 rounded-xl border border-slate-700 font-mono text-sm focus:ring-1 focus:ring-emerald-500 no-scrollbar" />
+            <textarea rows={8} value={bulkInput} onChange={e => setBulkInput(e.target.value)} placeholder="Entry Format Example:&#10;14, 25 50&#10;x4, 9x 100&#10;k123 20" className="w-full bg-slate-900 text-white p-4 rounded-xl border border-slate-700 font-mono text-sm focus:ring-1 focus:ring-emerald-500 no-scrollbar" />
             <div className="flex justify-end pt-2">
                 <button onClick={handleProcessBets} disabled={!selectedUserId || !selectedGameId || !bulkInput || isLoading} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 px-12 rounded-xl text-xs uppercase tracking-widest shadow-xl shadow-emerald-900/30 active:scale-95 disabled:opacity-50">
                     {isLoading ? 'Processing Batch...' : 'Confirm System Entries'}

@@ -100,9 +100,10 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
 
 /**
  * Normalizes number for comparison (strips leading zeros)
+ * FIXED: Now correctly handles "0" value.
  */
 const normNum = (n) => {
-    if (!n) return '';
+    if (n === undefined || n === null || n === '') return '';
     const s = String(n).trim();
     const numVal = parseInt(s, 10);
     return isNaN(numVal) ? s : String(numVal);
@@ -455,6 +456,7 @@ module.exports = {
         })();
     },
     getDetailedWinners: () => {
+        // Fetch all games with a valid winning number (no underscores)
         const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL AND winningNumber != ""').all();
         const validGames = games.filter(g => !g.winningNumber.includes('_'));
         
@@ -482,6 +484,7 @@ module.exports = {
                 }
             });
         });
+        // Sort by newest winners first
         return allWinners.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     },
     getFinancialSummary: () => {
