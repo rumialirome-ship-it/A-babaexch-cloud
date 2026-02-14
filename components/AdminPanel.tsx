@@ -42,6 +42,11 @@ interface LiveStats {
     dealerBookings: { id: string, name: string, total: number }[];
     typeBookings: { type: string, total: number }[];
     topPlayers: { id: string, name: string, total: number }[];
+    gameBreakdown: { 
+        id: string, 
+        name: string, 
+        numbers: { number: string, total: number }[] 
+    }[];
 }
 
 interface AdminPanelProps {
@@ -514,6 +519,12 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
         finally { setLoading(false); }
     };
 
+    const handleCopyGameBook = (gameName: string, numbers: { number: string, total: number }[]) => {
+        const formatted = numbers.map(n => `${n.number} rs${n.total}`).join('\n');
+        navigator.clipboard.writeText(formatted);
+        alert(`Book for ${gameName} copied vertically!`);
+    };
+
     useEffect(() => { loadLiveStats(); }, []);
 
     if (loading) return <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Syncing Live Stream...</div>;
@@ -527,6 +538,41 @@ const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Market-wise Breakdown */}
+                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl lg:col-span-2">
+                    <div className="p-6 bg-slate-800/60 border-b border-slate-700">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Live Bookings by Market</h4>
+                    </div>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {stats.gameBreakdown.map(game => (
+                            <div key={game.id} className="bg-slate-900/50 rounded-2xl border border-slate-700 flex flex-col overflow-hidden">
+                                <div className="p-4 bg-slate-800/40 border-b border-slate-700 flex justify-between items-center">
+                                    <h5 className="text-white font-black uppercase text-sm">{game.name}</h5>
+                                    <button 
+                                        onClick={() => handleCopyGameBook(game.name, game.numbers)}
+                                        className="text-[9px] font-black text-cyan-400 hover:text-white uppercase tracking-widest bg-cyan-400/10 px-2 py-1 rounded transition-all active:scale-90"
+                                    >
+                                        Copy Book
+                                    </button>
+                                </div>
+                                <div className="p-4 overflow-y-auto max-h-[300px] no-scrollbar">
+                                    <div className="divide-y divide-slate-800">
+                                        {game.numbers.map((n, i) => (
+                                            <div key={i} className="py-2 flex justify-between items-center">
+                                                <div className="text-xl font-mono font-black text-white">{n.number}</div>
+                                                <div className="text-emerald-400 font-bold font-mono">Rs {n.total.toLocaleString()}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {stats.gameBreakdown.length === 0 && (
+                            <div className="col-span-full py-12 text-center text-slate-600 font-black uppercase text-xs tracking-widest">No active bookings detected</div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
                     <div className="p-6 bg-slate-800/60 border-b border-slate-700">
                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Bookings by Dealer</h4>

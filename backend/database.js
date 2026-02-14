@@ -411,10 +411,16 @@ module.exports = {
     getLiveStats: () => {
         const bets = db.prepare('SELECT * FROM bets').all();
         const dealerMap = {};
+        const gameMap = {};
         const dealers = db.prepare('SELECT id, name FROM dealers').all();
+        const games = db.prepare('SELECT id, name FROM games').all();
+        
         dealers.forEach(d => { dealerMap[d.id] = { name: d.name, total: 0 }; });
+        games.forEach(g => { gameMap[g.id] = { name: g.name, numbers: {} }; });
+        
         const typeStats = { '1 Digit Open': 0, '1 Digit Close': 0, '2 Digit': 0, 'Bulk Game': 0, 'Combo Game': 0 };
         const userMap = {};
+        
         bets.forEach(b => {
             if (dealerMap[b.dealerId]) dealerMap[b.dealerId].total += b.totalAmount;
             if (typeStats[b.subGameType] !== undefined) typeStats[b.subGameType] += b.totalAmount;
@@ -423,11 +429,29 @@ module.exports = {
                 userMap[b.userId] = { name: u ? u.name : b.userId, total: 0 };
             }
             userMap[b.userId].total += b.totalAmount;
+            
+            // Number Breakdown by Game
+            if (gameMap[b.gameId]) {
+                const nums = safeJsonParse(b.numbers);
+                nums.forEach(n => {
+                    gameMap[b.gameId].numbers[n] = (gameMap[b.gameId].numbers[n] || 0) + b.amountPerNumber;
+                });
+            }
         });
+        
         return {
             dealerBookings: Object.entries(dealerMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total),
             typeBookings: Object.entries(typeStats).map(([type, total]) => ({ type, total })),
-            topPlayers: Object.entries(userMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total).slice(0, 10)
+            topPlayers: Object.entries(userMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total).slice(0, 10),
+            gameBreakdown: Object.entries(gameMap)
+                .map(([id, data]) => ({ 
+                    id, 
+                    name: data.name, 
+                    numbers: Object.entries(data.numbers)
+                        .map(([num, amt]) => ({ number: num, total: amt }))
+                        .sort((a,b) => a.number.localeCompare(b.number))
+                }))
+                .filter(g => g.numbers.length > 0)
         };
     },
     updateGameDrawTime: (gameId, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, gameId),
