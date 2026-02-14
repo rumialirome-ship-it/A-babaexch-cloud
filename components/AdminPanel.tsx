@@ -92,7 +92,7 @@ const MarketCountdown: React.FC<{ drawTime: string }> = ({ drawTime }) => {
 const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
     <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
         <div className="overflow-y-auto max-h-[60vh] no-scrollbar">
-            <table className="w-full text-left">
+            <table className="w-full text-left min-w-[600px]">
                 <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10">
                     <tr className="border-b border-slate-700">
                         <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date/Time</th>
@@ -104,8 +104,8 @@ const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                     {(entries || []).slice().reverse().map(entry => (
-                        <tr key={entry.id} className="hover:bg-cyan-500/5">
-                            <td className="p-4 text-[10px] font-mono text-slate-400">{new Date(entry.timestamp).toLocaleString()}</td>
+                        <tr key={entry.id} className="hover:bg-cyan-500/5 transition-colors">
+                            <td className="p-4 text-[10px] font-mono text-slate-400 whitespace-nowrap">{new Date(entry.timestamp).toLocaleString()}</td>
                             <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
                             <td className="p-4 text-right text-rose-400 font-mono text-xs">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
                             <td className="p-4 text-right text-emerald-400 font-mono text-xs">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
@@ -120,6 +120,303 @@ const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
         </div>
     </div>
 );
+
+const BettingSheetView: React.FC<{ 
+    games: Game[]; 
+    fetchWithAuth: any;
+    users: User[];
+    dealers: Dealer[];
+}> = ({ games, fetchWithAuth, users, dealers }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedGameId, setSelectedGameId] = useState('');
+    const [results, setResults] = useState<Bet[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const handleSearch = async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (searchQuery) params.append('q', searchQuery);
+            if (selectedGameId) params.append('gameId', selectedGameId);
+            
+            const res = await fetchWithAuth(`/api/admin/bets/search?${params.toString()}`);
+            if (res.ok) {
+                setResults(await res.json());
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            handleSearch();
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery, selectedGameId]);
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-800/60 p-6 rounded-2xl border border-slate-700">
+                <div className="flex-grow w-full md:w-auto">
+                    <h3 className="text-xl font-black text-white uppercase tracking-widest mb-1">Comprehensive Betting Sheet</h3>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-tighter">System-wide Book Audit & Number Tracking</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <div className="relative group min-w-[150px]">
+                        <input 
+                            type="text" 
+                            placeholder="Search Number..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono font-bold focus:ring-2 focus:ring-red-500 transition-all uppercase"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">{Icons.search}</div>
+                    </div>
+                    <select 
+                        value={selectedGameId} 
+                        onChange={(e) => setSelectedGameId(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xs uppercase focus:ring-2 focus:ring-red-500 min-w-[180px]"
+                    >
+                        <option value="">All Active Markets</option>
+                        {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full text-left min-w-[1000px]">
+                        <thead className="bg-slate-900/80 border-b border-slate-700">
+                            <tr>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Time</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Player / Dealer</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Game Type</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Booked Numbers</th>
+                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Stake</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                            {loading ? (
+                                <tr><td colSpan={6} className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Querying Global Book...</td></tr>
+                            ) : results.length === 0 ? (
+                                <tr><td colSpan={6} className="p-20 text-center text-slate-600 font-black uppercase text-xs">No matching bookings found</td></tr>
+                            ) : results.map(bet => {
+                                const game = games.find(g => g.id === bet.gameId);
+                                const user = users.find(u => u.id === bet.userId);
+                                const dealer = dealers.find(d => d.id === bet.dealerId);
+                                return (
+                                    <tr key={bet.id} className="hover:bg-red-500/5 transition-colors group">
+                                        <td className="p-4 text-[10px] font-mono text-slate-500">{new Date(bet.timestamp).toLocaleTimeString()}</td>
+                                        <td className="p-4">
+                                            <div className="text-white font-black text-xs uppercase">{game?.name || '---'}</div>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="text-xs font-black text-white uppercase">{user?.name || bet.userId}</div>
+                                            <div className="text-[9px] font-bold text-sky-400 uppercase tracking-widest">{dealer?.name || bet.dealerId}</div>
+                                        </td>
+                                        <td className="p-4 text-[10px] font-bold text-slate-400 uppercase">{bet.subGameType}</td>
+                                        <td className="p-4">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {bet.numbers.map((n, i) => (
+                                                    <span 
+                                                        key={i} 
+                                                        className={`px-2 py-0.5 rounded font-mono text-xs font-bold border ${n === searchQuery ? 'bg-red-500/20 text-red-400 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'bg-slate-900 text-slate-400 border-slate-700'}`}
+                                                    >
+                                                        {n}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <div className="text-emerald-400 font-black font-mono text-base">Rs {bet.totalAmount.toLocaleString()}</div>
+                                            <div className="text-[8px] text-slate-500 uppercase font-black">Total Ticket Value</div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TransactionForm: React.FC<{
+    type: 'Top-up' | 'Withdraw';
+    accountName: string;
+    onExecute: (amount: number) => Promise<void>;
+    onCancel: () => void;
+}> = ({ type, accountName, onExecute, onCancel }) => {
+    const [amount, setAmount] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amt = parseFloat(amount);
+        if (isNaN(amt) || amt <= 0) return;
+        setLoading(true);
+        try {
+            await onExecute(amt);
+        } catch (err) {
+            alert("Transaction failed.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+                <p className="text-xs text-slate-400 mb-2">Executing <span className="font-bold text-white uppercase">{type}</span> for:</p>
+                <p className="text-xl font-black text-cyan-400 uppercase tracking-tight">{accountName}</p>
+            </div>
+            <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Amount (PKR)</label>
+                <input 
+                    type="number" 
+                    autoFocus 
+                    value={amount} 
+                    onChange={e => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                    className="w-full bg-slate-800 p-4 rounded-xl border border-slate-700 text-2xl font-mono font-black text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                />
+            </div>
+            <div className="flex gap-3 pt-4">
+                <button type="button" onClick={onCancel} className="flex-1 py-4 bg-slate-800 text-slate-400 rounded-xl font-black text-xs uppercase tracking-widest hover:text-white">Cancel</button>
+                <button type="submit" disabled={loading} className={`flex-2 px-8 py-4 ${type === 'Top-up' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'} text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all disabled:opacity-50`}>
+                    {loading ? 'Processing...' : `Confirm ${type}`}
+                </button>
+            </div>
+        </form>
+    );
+};
+
+const LedgersView: React.FC<{
+    admin: Admin;
+    dealers: Dealer[];
+    topUpDealerWallet?: (dealerId: string, amount: number) => Promise<void>;
+    withdrawFromDealerWallet?: (dealerId: string, amount: number) => Promise<void>;
+    onRefresh: () => void;
+}> = ({ admin, dealers, topUpDealerWallet, withdrawFromDealerWallet, onRefresh }) => {
+    const [subTab, setSubTab] = useState<'dealer' | 'admin'>('dealer');
+    const [selectedDealerForLedger, setSelectedDealerForLedger] = useState<Dealer | null>(null);
+    const [selectedDealerForTransaction, setSelectedDealerForTransaction] = useState<{ dealer: Dealer, type: 'Top-up' | 'Withdraw' } | null>(null);
+
+    return (
+        <div className="space-y-8 animate-fade-in">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+                    <button 
+                        onClick={() => setSubTab('dealer')} 
+                        className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'dealer' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                    >
+                        Dealer Accounts
+                    </button>
+                    <button 
+                        onClick={() => setSubTab('admin')} 
+                        className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'admin' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                    >
+                        Admin Portfolio
+                    </button>
+                </div>
+            </div>
+
+            {subTab === 'admin' ? (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h3 className="text-xl font-black text-white uppercase tracking-widest mb-1">Central Admin Ledger</h3>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-tighter">System-wide treasury tracking</p>
+                        </div>
+                        <div className="bg-slate-800/50 p-4 rounded-xl border border-red-500/20 text-right">
+                             <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Total Reserves</div>
+                             <div className="text-2xl font-black text-white font-mono">Rs {admin.wallet.toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <LedgerTable entries={admin.ledger || []} />
+                </div>
+            ) : (
+                <div className="bg-slate-800/40 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
+                    <div className="p-6 border-b border-slate-700 bg-slate-800/60">
+                        <h3 className="text-white font-black uppercase tracking-widest">Agency Liquidity Management</h3>
+                    </div>
+                    <div className="overflow-x-auto no-scrollbar">
+                        <table className="w-full text-left min-w-[800px]">
+                            <thead className="bg-slate-900/50 border-b border-slate-800">
+                                <tr>
+                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dealer Profile</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Current Balance</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Accounting Tools</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800">
+                                {dealers.map(d => (
+                                    <tr key={d.id} className="hover:bg-cyan-500/5 transition-colors group">
+                                        <td className="p-4">
+                                            <div className="text-sm font-black text-white uppercase">{d.name}</div>
+                                            <div className="text-[10px] font-mono text-cyan-500 uppercase tracking-tighter">{d.id}</div>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="text-lg font-black text-emerald-400 font-mono">Rs {d.wallet.toLocaleString()}</div>
+                                            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Authorized Pool</div>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setSelectedDealerForTransaction({ dealer: d, type: 'Top-up' })} className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-500/20 transition-all">Top Up</button>
+                                                <button onClick={() => setSelectedDealerForTransaction({ dealer: d, type: 'Withdraw' })} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-500/20 transition-all">Withdraw</button>
+                                                <button onClick={() => setSelectedDealerForLedger(d)} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all">Audit Logs</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            <Modal 
+                isOpen={!!selectedDealerForTransaction} 
+                onClose={() => setSelectedDealerForTransaction(null)} 
+                title={`${selectedDealerForTransaction?.type} Fund Allocation`}
+                themeColor={selectedDealerForTransaction?.type === 'Top-up' ? 'emerald' : 'rose'}
+            >
+                {selectedDealerForTransaction && (
+                    <TransactionForm 
+                        type={selectedDealerForTransaction.type} 
+                        accountName={selectedDealerForTransaction.dealer.name}
+                        onExecute={async (amt) => {
+                            if (selectedDealerForTransaction.type === 'Top-up') {
+                                await topUpDealerWallet?.(selectedDealerForTransaction.dealer.id, amt);
+                            } else {
+                                await withdrawFromDealerWallet?.(selectedDealerForTransaction.dealer.id, amt);
+                            }
+                            onRefresh();
+                            setSelectedDealerForTransaction(null);
+                        }}
+                        onCancel={() => setSelectedDealerForTransaction(null)}
+                    />
+                )}
+            </Modal>
+
+            <Modal 
+                isOpen={!!selectedDealerForLedger} 
+                onClose={() => setSelectedDealerForLedger(null)} 
+                title={`Detailed Audit: ${selectedDealerForLedger?.name}`} 
+                size="xl" 
+                themeColor="cyan"
+            >
+                {selectedDealerForLedger && <LedgerTable entries={selectedDealerForLedger.ledger || []} />}
+            </Modal>
+        </div>
+    );
+};
 
 const LiveView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
     const [stats, setStats] = useState<LiveStats | null>(null);
@@ -369,7 +666,7 @@ const WinnersView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
 };
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ 
-  admin, dealers, users, games, declareWinner, updateWinner, approvePayouts, toggleAccountRestriction, updateGameDrawTime, onRefreshData 
+  admin, dealers, users, games, declareWinner, updateWinner, approvePayouts, topUpDealerWallet, withdrawFromDealerWallet, toggleAccountRestriction, updateGameDrawTime, onRefreshData 
 }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
@@ -415,7 +712,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Stats' },
     { id: 'live', label: 'Live' },
-    { id: 'stakes', label: 'Stakes' },
+    { id: 'ledgers', label: 'Ledgers' },
+    { id: 'bettingsheet', label: 'Sheet' },
     { id: 'games', label: 'Markets' },
     { id: 'winners', label: 'Winners' },
     { id: 'users', label: 'Users' },
@@ -437,7 +735,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'live' && <LiveView fetchWithAuth={fetchWithAuth} />}
-      {activeTab === 'stakes' && <StakesView fetchWithAuth={fetchWithAuth} />}
+      {activeTab === 'ledgers' && (
+          <LedgersView 
+            admin={admin} 
+            dealers={dealers} 
+            topUpDealerWallet={topUpDealerWallet} 
+            withdrawFromDealerWallet={withdrawFromDealerWallet}
+            onRefresh={() => onRefreshData?.()}
+          />
+      )}
+      {activeTab === 'bettingsheet' && (
+          <BettingSheetView 
+            games={games} 
+            fetchWithAuth={fetchWithAuth} 
+            users={users} 
+            dealers={dealers} 
+          />
+      )}
       {activeTab === 'winners' && <WinnersView fetchWithAuth={fetchWithAuth} />}
 
       {activeTab === 'users' && (

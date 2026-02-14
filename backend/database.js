@@ -174,6 +174,27 @@ module.exports = {
             return b;
         });
     },
+    searchBets: (query, gameId, userId) => {
+        let sql = 'SELECT * FROM bets WHERE 1=1';
+        const params = [];
+        if (query) {
+            sql += ' AND numbers LIKE ?';
+            params.push(`%"${query}"%`);
+        }
+        if (gameId) {
+            sql += ' AND gameId = ?';
+            params.push(gameId);
+        }
+        if (userId) {
+            sql += ' AND userId = ?';
+            params.push(userId);
+        }
+        return db.prepare(sql).all(...params).map(b => ({
+            ...b,
+            numbers: safeJsonParse(b.numbers),
+            timestamp: new Date(b.timestamp)
+        }));
+    },
     createUser: (u) => {
         const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
         const defaultBetLimits = JSON.stringify({ oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });
