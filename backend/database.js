@@ -620,15 +620,49 @@ module.exports = {
     },
     updateGameDrawTime: (gameId, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, gameId),
     declareWinner: (gameId, num) => {
-        const game = db.prepare('SELECT name FROM games WHERE id = ?').get(gameId);
-        let val = String(num).trim();
-        // Pad single digits for double digit games
-        if (game && game.name !== 'AKC' && val.length === 1 && val !== '') {
-            val = '0' + val;
-        }
-        return db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
+        return db.transaction(() => {
+            const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
+            if (!game) return { success: false };
+            
+            let val = String(num).trim();
+            // Pad single digits for double digit games
+            if (game.name !== 'AKC' && val.length === 1 && val !== '') {
+                val = '0' + val;
+            }
+
+            // 1. Update winning number
+            db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
+            
+            // 2. Automatically trigger payout logic if a valid result is set
+            if (val && !val.includes('_') && !game.payoutsApproved) {
+                const betsWithUsers = db.prepare(`
+                    SELECT b.*, u.prizeRates, u.name as userName
+                    FROM bets b 
+                    JOIN users u ON LOWER(b.userId) = LOWER(u.id) 
+                    WHERE b.gameId = ?
+                `).all(gameId);
+
+                betsWithUsers.forEach(bet => {
+                    const payout = calculatePayout(bet, val, game.name, bet.prizeRates);
+                    if (payout > 0) {
+                        db.prepare('UPDATE users SET wallet = wallet + ? WHERE LOWER(id) = LOWER(?)').run(payout, bet.userId);
+                        const newUser = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                            uuidv4(), bet.userId.toLowerCase(), 'USER', new Date().toISOString(), `Winning Payout: ${game.name} (${val})`, 0, payout, newUser.wallet
+                        );
+                    }
+                });
+                
+                // 3. Mark as approved automatically
+                db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
+            }
+
+            return { success: true };
+        })();
     },
     approvePayouts: (gameId) => {
+        // This function is now redundant as payouts happen automatically during declaration,
+        // but we keep it for legacy compatibility or forced re-calculation.
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
             if (!game || !game.winningNumber || game.winningNumber.includes('_') || game.payoutsApproved) return { success: false };

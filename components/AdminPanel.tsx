@@ -949,13 +949,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'games' && (
         <div className="animate-fade-in space-y-10">
-            {/* Quick Result Entry Console - Hidden as requested */}
-            <QuickResultConsole 
-                games={games} 
-                onSetResult={(id, val, isUpdate) => handleDeclareAction(id, val, isUpdate)} 
-                onApprove={async (id) => { await approvePayouts?.(id); if (onRefreshData) await onRefreshData(); }}
-            />
-
             {/* Market Detail Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {games.map(game => {
@@ -1023,12 +1016,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     )}
                                 </div>
 
-                                <div className="flex gap-2">
-                                    {game.winningNumber && !game.payoutsApproved && (
-                                        <button onClick={async () => { await approvePayouts?.(game.id); if (onRefreshData) await onRefreshData(); }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-900/30 transition-all active:scale-95">Verify & Pay All</button>
-                                    )}
-                                    {game.payoutsApproved && (
-                                        <div className="flex-1 bg-slate-900/50 text-slate-500 border border-slate-800 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center italic">Verified Batch Paid</div>
+                                <div className="flex flex-col gap-2">
+                                    {game.payoutsApproved ? (
+                                        <div className="flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center shadow-inner">
+                                            <span className="text-xs">✓</span> Prizes Auto-Disbursed
+                                        </div>
+                                    ) : game.winningNumber ? (
+                                         <div className="flex items-center justify-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center">
+                                            Processing Payouts...
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center gap-2 bg-slate-900/50 border border-slate-800 text-slate-500 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center">
+                                            Awaiting Declaration
+                                        </div>
                                     )}
                                 </div>
                             </div>
