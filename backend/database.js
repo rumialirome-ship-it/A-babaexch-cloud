@@ -90,6 +90,7 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
     if (!id) return null;
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
+    // CRITICAL: Order ledgers by timestamp DESC (Newest First)
     account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
     if (table === 'games') account.isMarketOpen = isGameOpen(account.drawTime);
     if (account.prizeRates) account.prizeRates = safeJsonParse(account.prizeRates);
@@ -123,14 +124,17 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     nums.forEach(num => {
         const numNorm = normNum(num);
         if (bet.subGameType === '1 Digit Open') {
+            // Compare first digit
             if (paddedWin.length >= 1 && numNorm === normNum(paddedWin[0])) winningCount++;
         } else if (bet.subGameType === '1 Digit Close') {
             if (gameName === 'AKC') {
                 if (numNorm === winNorm) winningCount++;
             } else {
+                // Compare second digit (index 1 of 2-digit padded string)
                 if (paddedWin.length === 2 && numNorm === normNum(paddedWin[1])) winningCount++;
             }
         } else {
+            // 2-Digit, Bulk, Combo
             if (numNorm === winNorm) winningCount++;
         }
     });
