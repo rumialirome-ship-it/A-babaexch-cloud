@@ -90,7 +90,7 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
     if (!id) return null;
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
-    // FETCH LATEST 100 DESCENDING - UI WILL REVERSE FOR FORWARD SEQUENCE
+    // FETCH LATEST entries DESCENDING - UI WILL REVERSE FOR FORWARD SEQUENCE
     account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
     if (table === 'games') account.isMarketOpen = isGameOpen(account.drawTime);
     if (account.prizeRates) account.prizeRates = safeJsonParse(account.prizeRates);
@@ -196,20 +196,21 @@ module.exports = {
         const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
         if (admin) {
             admin.prizeRates = safeJsonParse(admin.prizeRates);
-            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(admin.id);
+            // FIX: Use LOWER() for admin ledger fetching too
+            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(admin.id);
         }
         const dealers = db.prepare('SELECT * FROM dealers').all().map(d => ({
             ...d,
             prizeRates: safeJsonParse(d.prizeRates),
             isRestricted: !!d.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(d.id)
+            ledger: db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(d.id)
         }));
         const users = db.prepare('SELECT * FROM users').all().map(u => ({
             ...u,
             prizeRates: safeJsonParse(u.prizeRates),
             betLimits: safeJsonParse(u.betLimits),
             isRestricted: !!u.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(u.id)
+            ledger: db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(u.id)
         }));
         const games = db.prepare('SELECT * FROM games').all();
         const bets = db.prepare('SELECT * FROM bets').all().map(b => ({
@@ -352,7 +353,7 @@ module.exports = {
             );
             if (wallet > 0) {
                 db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), d.id, 'DEALER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
+                    uuidv4(), d.id.toLowerCase(), 'DEALER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
                 );
             }
         })();
@@ -370,7 +371,7 @@ module.exports = {
             );
             if (wallet > 0) {
                 db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), u.id, 'USER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
+                    uuidv4(), u.id.toLowerCase(), 'USER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
                 );
             }
         })();
