@@ -297,7 +297,7 @@ const DealerForm: React.FC<{
             </div>
 
             <div className="flex gap-4 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest border border-slate-700">Cancel</button>
+                <button type="button" onClick={onCancel} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black text-[10px] uppercase tracking-widest border border-slate-700">Cancel</button>
                 <button type="submit" disabled={loading} className="flex-2 px-12 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-cyan-900/20 active:scale-95 transition-all">
                     {loading ? 'SYNCING...' : dealer ? 'APPLY UPDATE' : 'COMMIT REGISTRATION'}
                 </button>

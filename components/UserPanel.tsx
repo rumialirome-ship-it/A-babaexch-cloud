@@ -144,7 +144,7 @@ const GameStakeBreakdown: React.FC<{ games: Game[], bets: Bet[], user: User }> =
                 ))}
             </div>
 
-            {/* Desktop View - High density table as requested */}
+            {/* Desktop View - High density table */}
             <div className="hidden sm:block bg-slate-800/40 rounded-xl overflow-hidden border border-slate-700 shadow-xl backdrop-blur-md">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -220,14 +220,16 @@ const LedgerView: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
     const [startDate, setStartDate] = useState(getTodayDateString());
     const [endDate, setEndDate] = useState(getTodayDateString());
 
+    // SORT ENTRIES BY TIMESTAMP ASCENDING (OLDEST FIRST, NEWEST LAST)
     const filteredEntries = useMemo(() => {
-        if (!startDate && !endDate) return entries;
-        return entries.filter(entry => {
+        const result = entries.filter(entry => {
             const entryDateStr = entry.timestamp.toISOString().split('T')[0];
             if (startDate && entryDateStr < startDate) return false;
             if (endDate && entryDateStr > endDate) return false;
             return true;
         });
+        // SORT ASC FOR FORWARD SEQUENCE
+        return [...result].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     }, [entries, startDate, endDate]);
 
     const handleClearFilters = () => {
@@ -264,19 +266,19 @@ const LedgerView: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
                             <tr>
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
-                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Debit</th>
-                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Credit</th>
-                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Balance</th>
+                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Debit (-)</th>
+                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Credit (+)</th>
+                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Running Balance</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {[...filteredEntries].reverse().map(entry => (
+                            {filteredEntries.map(entry => (
                                 <tr key={entry.id} className="hover:bg-sky-500/10 transition-colors">
                                     <td className="p-4 text-sm text-slate-400 whitespace-nowrap">{entry.timestamp.toLocaleString()}</td>
-                                    <td className="p-4 text-white">{entry.description}</td>
-                                    <td className="p-4 text-right text-red-400 font-mono">{entry.debit > 0 ? entry.debit.toFixed(2) : '-'}</td>
-                                    <td className="p-4 text-right text-green-400 font-mono">{entry.credit > 0 ? entry.credit.toFixed(2) : '-'}</td>
-                                    <td className="p-4 text-right font-semibold text-white font-mono">{entry.balance.toFixed(2)}</td>
+                                    <td className="p-4 text-white font-medium">{entry.description}</td>
+                                    <td className="p-4 text-right text-red-400 font-mono">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
+                                    <td className="p-4 text-right text-green-400 font-mono">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
+                                    <td className="p-4 text-right font-bold text-white font-mono">Rs {entry.balance.toFixed(2)}</td>
                                 </tr>
                             ))}
                             {filteredEntries.length === 0 && (
@@ -373,7 +375,7 @@ const BetHistoryView: React.FC<{ bets: Bet[], games: Game[], user: User }> = ({ 
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                           {[...filteredBets].reverse().map(bet => {
+                           {filteredBets.map(bet => {
                                 const game = games.find(g => g.id === bet.gameId);
                                 const outcome = getBetOutcome(bet);
                                 return (
@@ -414,9 +416,6 @@ const formatTime12h = (time24: string) => {
 const GameCard: React.FC<{ game: Game; onPlay: (game: Game) => void; isRestricted: boolean; }> = ({ game, onPlay, isRestricted }) => {
     const { status, text: countdownText } = useCountdown(game.drawTime);
     const hasFinalWinner = !!game.winningNumber && !game.winningNumber.endsWith('_');
-    
-    // CRITICAL FIX: LS3 and other games should rely on isMarketOpen from backend 
-    // to prevent device clock skew from disabling the button early.
     const isPlayable = !!game.isMarketOpen && !isRestricted;
     const isMarketClosedForDisplay = !game.isMarketOpen;
 
@@ -577,7 +576,6 @@ const BettingModal: React.FC<BettingModalProps> = ({ game, games, user, onClose,
             if (!currentGameId) { result.errors.push(`Line "${line}" missing valid game.`); continue; }
             const gameNameOnLine = games.find(g => g.id === currentGameId)?.name || 'Unknown Game';
             
-            // Loose Stake Detection: Support "43 rs100" and "43 100"
             const stakeMatch = currentLine.match(/(?:rs|r)?\s*(\d+\.?\d*)$/i);
             const stake = stakeMatch ? parseFloat(stakeMatch[1]) : 0;
             if (stake <= 0) { result.errors.push(`Line "${line}" missing stake.`); continue; }
@@ -693,8 +691,6 @@ const BettingModal: React.FC<BettingModalProps> = ({ game, games, user, onClose,
                 const { betsByGame, errors } = parsedBulkBet;
                 if (errors.length > 0) throw new Error(errors[0]);
                 if (betsByGame.size === 0) throw new Error("No valid bets entered.");
-                
-                // CRITICAL FIX: Convert Map to plain object for JSON serialization
                 const multiGameBetsObj: any = {};
                 betsByGame.forEach((gameData: any, gameId: string) => { 
                     multiGameBetsObj[gameId] = { 
@@ -702,7 +698,6 @@ const BettingModal: React.FC<BettingModalProps> = ({ game, games, user, onClose,
                         betGroups: Array.from(gameData.betGroups.values()) 
                     }; 
                 });
-                
                 await onPlaceBet({ isMultiGame: true, multiGameBets: multiGameBetsObj });
             } else {
                 const { numbers, totalCost, error: parseError, stake } = parsedManualBet;

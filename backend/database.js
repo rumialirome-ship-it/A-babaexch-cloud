@@ -90,8 +90,8 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
     if (!id) return null;
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
-    // CRITICAL: Order ledgers by timestamp DESC (Newest First)
-    account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+    // FETCH LATEST 100 DESCENDING - UI WILL REVERSE FOR FORWARD SEQUENCE
+    account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
     if (table === 'games') account.isMarketOpen = isGameOpen(account.drawTime);
     if (account.prizeRates) account.prizeRates = safeJsonParse(account.prizeRates);
     if (account.betLimits) account.betLimits = safeJsonParse(account.betLimits);
@@ -99,9 +99,6 @@ const findAccountById = (id, table, ledgerLimit = 100) => {
     return account;
 };
 
-/**
- * Normalizes number for comparison (strips leading zeros)
- */
 const normNum = (n) => {
     if (n === undefined || n === null || String(n).trim() === '') return '';
     const s = String(n).trim();
@@ -114,8 +111,6 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     
     const winStr = String(winningNumber).trim();
     const winNorm = normNum(winStr);
-    
-    // Auto-pad single digits for 2-digit logic comparison unless it's AKC
     const paddedWin = (gameName !== 'AKC' && winStr.length === 1) ? '0' + winStr : winStr;
 
     let winningCount = 0;
@@ -124,17 +119,14 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     nums.forEach(num => {
         const numNorm = normNum(num);
         if (bet.subGameType === '1 Digit Open') {
-            // Compare first digit
             if (paddedWin.length >= 1 && numNorm === normNum(paddedWin[0])) winningCount++;
         } else if (bet.subGameType === '1 Digit Close') {
             if (gameName === 'AKC') {
                 if (numNorm === winNorm) winningCount++;
             } else {
-                // Compare second digit (index 1 of 2-digit padded string)
                 if (paddedWin.length === 2 && numNorm === normNum(paddedWin[1])) winningCount++;
             }
         } else {
-            // 2-Digit, Bulk, Combo
             if (numNorm === winNorm) winningCount++;
         }
     });
@@ -170,20 +162,20 @@ module.exports = {
         const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
         if (admin) {
             admin.prizeRates = safeJsonParse(admin.prizeRates);
-            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC').all(admin.id);
+            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(admin.id);
         }
         const dealers = db.prepare('SELECT * FROM dealers').all().map(d => ({
             ...d,
             prizeRates: safeJsonParse(d.prizeRates),
             isRestricted: !!d.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC').all(d.id)
+            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(d.id)
         }));
         const users = db.prepare('SELECT * FROM users').all().map(u => ({
             ...u,
             prizeRates: safeJsonParse(u.prizeRates),
             betLimits: safeJsonParse(u.betLimits),
             isRestricted: !!u.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC').all(u.id)
+            ledger: db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC').all(u.id)
         }));
         const games = db.prepare('SELECT * FROM games').all();
         const bets = db.prepare('SELECT * FROM bets').all().map(b => ({
@@ -206,7 +198,7 @@ module.exports = {
             if (a.betLimits) a.betLimits = safeJsonParse(a.betLimits);
             if (a.numbers) a.numbers = safeJsonParse(a.numbers);
             if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
-            a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+            a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
             return a;
         });
     },
@@ -215,7 +207,7 @@ module.exports = {
             u.prizeRates = safeJsonParse(u.prizeRates);
             u.betLimits = safeJsonParse(u.betLimits);
             u.isRestricted = !!u.isRestricted;
-            u.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC LIMIT 50').all(u.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+            u.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT 50').all(u.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
             return u;
         });
     },
@@ -424,30 +416,36 @@ module.exports = {
                 const currentBalance = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(userId).wallet;
                 if (currentBalance < totalCost) throw new Error('Insufficient wallet balance');
 
-                // 1. DEDUCT STAKE
+                // 1. DEDUCT PLAY AMOUNT FIRST
                 const afterBetBalance = currentBalance - totalCost;
                 db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterBetBalance, userId);
+                
+                const timestamp = new Date().toISOString();
                 db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), userId.toLowerCase(), 'USER', new Date().toISOString(), `Stake Invested: ${game.name}`, totalCost, 0, afterBetBalance
+                    uuidv4(), userId.toLowerCase(), 'USER', timestamp, `Play Amount Deducted: ${game.name}`, totalCost, 0, afterBetBalance
                 );
 
-                // 2. ADD COMMISSION
+                // 2. ADD COMMISSION SECOND
                 const userComm = totalCost * (user.commissionRate / 100);
                 if (userComm > 0) {
                     const afterCommBalance = afterBetBalance + userComm;
                     db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterCommBalance, userId);
+                    
+                    // Slightly later ISO timestamp to ensure sorting is forward
+                    const commTimestamp = new Date(new Date(timestamp).getTime() + 1).toISOString();
                     db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), userId.toLowerCase(), 'USER', new Date().toISOString(), `Stake Reward (Comm.): ${game.name}`, 0, userComm, afterCommBalance
+                        uuidv4(), userId.toLowerCase(), 'USER', commTimestamp, `Play Commission Added: ${game.name}`, 0, userComm, afterCommBalance
                     );
                 }
 
+                // 3. DEALER COMMISSION
                 const dealerComm = totalCost * (dealer.commissionRate / 100);
                 if (dealerComm > 0) {
                     const currentDealerWallet = db.prepare('SELECT wallet FROM dealers WHERE LOWER(id) = LOWER(?)').get(dealer.id).wallet;
                     const afterDealerBalance = currentDealerWallet + dealerComm;
                     db.prepare('UPDATE dealers SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterDealerBalance, dealer.id);
                     db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), dealer.id.toLowerCase(), 'DEALER', new Date().toISOString(), `Agency Stake Comm. [Player: ${user.name}] [Market: ${game.name}]`, 0, dealerComm, afterDealerBalance
+                        uuidv4(), dealer.id.toLowerCase(), 'DEALER', new Date().toISOString(), `Network Comm: ${user.name} [${game.name}]`, 0, dealerComm, afterDealerBalance
                     );
                 }
 
@@ -467,46 +465,6 @@ module.exports = {
             }
             return { success: true };
         })();
-    },
-    getDetailedWinners: () => {
-        // Fetch all bets joined with their game info for games that have a declared winning number
-        const sql = `
-            SELECT b.*, g.name as gameName, g.winningNumber, u.name as userName, u.prizeRates, d.name as dealerName
-            FROM bets b
-            JOIN games g ON b.gameId = g.id
-            JOIN users u ON LOWER(b.userId) = LOWER(u.id)
-            LEFT JOIN dealers d ON LOWER(b.dealerId) = LOWER(d.id)
-            WHERE g.winningNumber IS NOT NULL AND g.winningNumber != '' AND g.winningNumber NOT LIKE '%\_%' ESCAPE '\\'
-        `;
-        
-        const rows = db.prepare(sql).all();
-        const allWinners = [];
-
-        rows.forEach(row => {
-            const payout = calculatePayout(
-                { subGameType: row.subGameType, numbers: row.numbers, amountPerNumber: row.amountPerNumber },
-                row.winningNumber,
-                row.gameName,
-                row.prizeRates
-            );
-
-            if (payout > 0) {
-                allWinners.push({
-                    id: row.id,
-                    userName: row.userName,
-                    userId: row.userId,
-                    dealerName: row.dealerName || 'Unknown',
-                    dealerId: row.dealerId,
-                    gameName: row.gameName,
-                    winningNumber: row.winningNumber,
-                    payout: payout,
-                    timestamp: row.timestamp
-                });
-            }
-        });
-
-        // Sort descending by timestamp: Newest first
-        return allWinners.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     },
     getFinancialSummary: () => {
         const games = db.prepare('SELECT * FROM games').all();
@@ -653,7 +611,7 @@ module.exports = {
                     db.prepare('UPDATE users SET wallet = wallet + ? WHERE LOWER(id) = LOWER(?)').run(payout, bet.userId);
                     const newUser = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
                     db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), bet.userId.toLowerCase(), 'USER', new Date().toISOString(), `DRAW WINNING: ${game.name} (${game.winningNumber})`, 0, payout, newUser.wallet
+                        uuidv4(), bet.userId.toLowerCase(), 'USER', new Date().toISOString(), `Draw Winner: ${game.name} (${game.winningNumber})`, 0, payout, newUser.wallet
                     );
                 }
             });

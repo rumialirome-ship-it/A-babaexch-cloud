@@ -67,37 +67,44 @@ const RevenueDashboard: React.FC<{ dealer: Dealer; bets: Bet[] }> = ({ dealer, b
     );
 };
 
-const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => (
-    <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
-        <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
-            <table className="w-full text-left min-w-[600px]">
-                <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10">
-                    <tr className="border-b border-slate-700">
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Narrative</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Debit (-)</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Credit (+)</th>
-                        <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Portfolio Balance</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                    {(entries || []).slice().reverse().map(entry => (
-                        <tr key={entry.id} className="hover:bg-emerald-500/5 transition-all group">
-                            <td className="p-4 whitespace-nowrap text-[11px] font-mono text-slate-400">{new Date(entry.timestamp).toLocaleString()}</td>
-                            <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
-                            <td className="p-4 text-right text-rose-400 font-mono text-xs">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
-                            <td className="p-4 text-right text-emerald-400 font-mono text-xs">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
-                            <td className="p-4 text-right font-black text-white font-mono text-xs">Rs {entry.balance.toFixed(2)}</td>
+const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
+    // SORT ENTRIES BY TIMESTAMP ASCENDING (OLDEST FIRST, NEWEST LAST)
+    const sortedEntries = useMemo(() => {
+        return [...entries].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    }, [entries]);
+
+    return (
+        <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
+            <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
+                <table className="w-full text-left min-w-[600px]">
+                    <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10">
+                        <tr className="border-b border-slate-700">
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Narrative</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Debit (-)</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Credit (+)</th>
+                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Portfolio Balance</th>
                         </tr>
-                    ))}
-                    {(!entries || entries.length === 0) && (
-                        <tr><td colSpan={5} className="p-12 text-center text-slate-500 font-black uppercase text-[10px] tracking-widest">No transaction logs available</td></tr>
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                        {sortedEntries.map(entry => (
+                            <tr key={entry.id} className="hover:bg-emerald-500/5 transition-all group">
+                                <td className="p-4 whitespace-nowrap text-[11px] font-mono text-slate-400">{new Date(entry.timestamp).toLocaleString()}</td>
+                                <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
+                                <td className="p-4 text-right text-rose-400 font-mono text-xs">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
+                                <td className="p-4 text-right text-emerald-400 font-mono text-xs">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
+                                <td className="p-4 text-right font-black text-white font-mono text-xs">Rs {entry.balance.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                        {(!entries || entries.length === 0) && (
+                            <tr><td colSpan={5} className="p-12 text-center text-slate-500 font-black uppercase text-[10px] tracking-widest">No transaction logs available</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 interface DealerPanelProps {
   dealer: Dealer;
@@ -451,7 +458,7 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
         setIsLoading(true);
         try {
             const lines = bulkInput.split('\n').filter(l => l.trim());
-            const betGroupsMap = new Map(); // Use map to group by subGameType and stake
+            const betGroupsMap = new Map();
 
             const currentGame = games.find(g => g.id === selectedGameId);
             const isAkcGame = currentGame?.name === 'AKC';
