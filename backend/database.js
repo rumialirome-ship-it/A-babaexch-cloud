@@ -156,8 +156,42 @@ const performDailyCleanup = () => {
     }
 };
 
+const getDetailedWinners = () => {
+    const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL').all();
+    const winners = [];
+
+    games.forEach(game => {
+        if (!game.winningNumber || game.winningNumber.includes('_')) return;
+        
+        const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(game.id);
+        bets.forEach(bet => {
+            const user = db.prepare('SELECT name, prizeRates, dealerId FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
+            if (!user) return;
+            
+            const dealer = db.prepare('SELECT name FROM dealers WHERE LOWER(id) = LOWER(?)').get(user.dealerId);
+            const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
+            
+            if (payout > 0) {
+                winners.push({
+                    id: bet.id,
+                    userName: user.name,
+                    userId: bet.userId,
+                    dealerName: dealer ? dealer.name : 'Unknown',
+                    dealerId: user.dealerId,
+                    gameName: game.name,
+                    winningNumber: game.winningNumber,
+                    payout: payout,
+                    timestamp: bet.timestamp
+                });
+            }
+        });
+    });
+
+    return winners.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+};
+
 module.exports = {
-    connect, findAccountById, performDailyCleanup,
+    connect, findAccountById, performDailyCleanup, getDetailedWinners,
     exportDatabaseState: () => {
         const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
         if (admin) {
