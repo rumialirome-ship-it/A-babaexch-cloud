@@ -8,11 +8,14 @@ interface ResultRevealOverlayProps {
 }
 
 const TENSION_PHRASES = [
-    "INITIATING DRAW...",
-    "HARNESSING LUCK...",
-    "ORACLE SPEAKING...",
-    "LOCKING IN...",
-    "NUMBERS ALIGNING..."
+    "INITIATING DRAW SEQUENCE...",
+    "HARNESSING GLOBAL LUCK...",
+    "ORACLE IS CALCULATING...",
+    "LOCKING IN FINAL VIBRATIONS...",
+    "NUMBERS ARE ALIGNING...",
+    "ALGORITHM SYNCHRONIZING...",
+    "DECRYPTING FORTUNE...",
+    "STABILIZING RESULT FIELD..."
 ];
 
 const Confetti: React.FC = () => {
@@ -58,8 +61,8 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
   const [elapsed, setElapsed] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
 
-  // Accelerated: Set to 2 seconds for high-speed declaration
-  const TOTAL_ROLL_TIME = 2000; 
+  // Set to 30 seconds for high-tension declaration
+  const TOTAL_ROLL_TIME = 30000; 
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -72,15 +75,15 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
           ? Math.floor(Math.random() * 10).toString()
           : Math.floor(Math.random() * 100).toString().padStart(2, '0');
         setDisplayNum(randomNum);
-      }, 20); // Faster rolling digits
+      }, 50); // Rolling digits
 
       phraseInterval = setInterval(() => {
         setPhraseIndex(prev => (prev + 1) % TENSION_PHRASES.length);
-      }, 400); // Faster phrase rotation
+      }, 3000); // Slower phrase rotation for 30s duration
 
       progressInterval = setInterval(() => {
-        setElapsed(prev => prev + 50);
-      }, 50);
+        setElapsed(prev => prev + 100);
+      }, 100);
 
       const timer = setTimeout(() => {
         setShowFlash(true);
@@ -90,7 +93,7 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
             setIsShaking(true);
             setShowFlash(false);
             setTimeout(() => setIsShaking(false), 300);
-        }, 80); // Snappier flash
+        }, 100);
       }, TOTAL_ROLL_TIME);
 
       return () => {
@@ -110,7 +113,7 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
         <div 
             className="w-[300vw] h-[300vw] opacity-40 animate-spotlight"
             style={{ 
-                animationDuration: `${8 - (intensity * 6)}s`,
+                animationDuration: `${12 - (intensity * 10)}s`,
                 background: `conic-gradient(from 0deg, 
                     transparent 0deg, 
                     rgba(6,182,212,0.3) 20deg, 
@@ -132,12 +135,17 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
             <h2 className={`text-lg md:text-3xl font-black tracking-[0.4em] uppercase transition-all duration-300 ${phase === 'REVEAL' ? 'text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'text-white/90'}`}>
                 {phase === 'REVEAL' ? '✨ RESULT DECLARED ✨' : TENSION_PHRASES[phraseIndex]}
             </h2>
-            <div className="h-2 w-64 md:w-96 mx-auto mt-4 bg-slate-800 rounded-full overflow-hidden border border-white/10">
+            <div className="h-3 w-64 md:w-96 mx-auto mt-6 bg-slate-800 rounded-full overflow-hidden border border-white/10 p-0.5">
                 <div 
-                    className={`h-full transition-all duration-50 ease-linear ${intensity > 0.8 ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-cyan-500 to-blue-500'}`} 
+                    className={`h-full transition-all duration-100 ease-linear rounded-full ${intensity > 0.8 ? 'bg-gradient-to-r from-orange-500 to-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-gradient-to-r from-cyan-500 to-blue-500'}`} 
                     style={{ width: phase === 'REVEAL' ? '100%' : `${intensity * 100}%` }}
                 ></div>
             </div>
+            {phase === 'ROLLING' && (
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-3 animate-pulse">
+                    Please wait for system validation...
+                </p>
+            )}
         </div>
 
         <h1 className={`text-5xl md:text-8xl font-black uppercase tracking-tighter mb-8 transition-all duration-300 ${phase === 'REVEAL' ? 'text-white scale-110' : 'text-slate-600'}`}>
@@ -176,8 +184,13 @@ const ResultRevealOverlay: React.FC<ResultRevealOverlayProps> = ({ gameName, win
               </button>
             </div>
           ) : (
-            <div className="text-white/50 text-xs font-mono uppercase tracking-[0.4em] animate-pulse">
-                SYNCING DATA...
+            <div className="flex flex-col items-center gap-2">
+                <div className="text-white/50 text-xs font-mono uppercase tracking-[0.4em] animate-pulse">
+                    GENERATING SECURE ENTROPY
+                </div>
+                <div className="text-[10px] text-slate-600 font-black uppercase tracking-widest">
+                    {Math.round(intensity * 100)}% COMPLETE
+                </div>
             </div>
           )}
         </div>

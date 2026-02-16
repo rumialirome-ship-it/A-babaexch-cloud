@@ -438,6 +438,7 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
     const [query, setQuery] = useState('');
     const [data, setData] = useState<NumberSummaryData | null>(null);
     const [loading, setLoading] = useState(false);
+    const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -454,9 +455,11 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
         finally { setLoading(false); }
     };
 
-    const handleCopy = (numbers: { number: string, total: number }[]) => {
+    const handleCopy = (numbers: { number: string, total: number }[], sectionId: string) => {
         const text = numbers.map(n => `${n.number} rs${n.total}`).join('\n');
         navigator.clipboard.writeText(text);
+        setCopiedSection(sectionId);
+        setTimeout(() => setCopiedSection(null), 2000);
     };
 
     const clearFilters = () => {
@@ -525,8 +528,11 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
                         <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
                             <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
                                 <h4 className="text-lg font-black text-cyan-400 uppercase tracking-widest">2 Digit Stakes</h4>
-                                <button onClick={() => handleCopy(data.twoDigit)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
-                                    {Icons.clipboardList} Copy
+                                <button 
+                                    onClick={() => handleCopy(data.twoDigit, 'twoDigit')} 
+                                    className={`px-3 py-1 rounded flex items-center gap-1 font-black uppercase text-[10px] transition-all ${copiedSection === 'twoDigit' ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
+                                >
+                                    {copiedSection === 'twoDigit' ? <>{Icons.checkCircle} COPIED</> : <>{Icons.clipboardList} Copy</>}
                                 </button>
                             </div>
                             <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
@@ -544,8 +550,11 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
                         <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
                             <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
                                 <h4 className="text-lg font-black text-amber-400 uppercase tracking-widest">1 Digit Open</h4>
-                                <button onClick={() => handleCopy(data.oneDigitOpen)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
-                                    {Icons.clipboardList} Copy
+                                <button 
+                                    onClick={() => handleCopy(data.oneDigitOpen, 'oneDigitOpen')} 
+                                    className={`px-3 py-1 rounded flex items-center gap-1 font-black uppercase text-[10px] transition-all ${copiedSection === 'oneDigitOpen' ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
+                                >
+                                    {copiedSection === 'oneDigitOpen' ? <>{Icons.checkCircle} COPIED</> : <>{Icons.clipboardList} Copy</>}
                                 </button>
                             </div>
                             <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
@@ -563,8 +572,11 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
                         <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden flex flex-col shadow-2xl h-[600px]">
                             <div className="p-5 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
                                 <h4 className="text-lg font-black text-rose-400 uppercase tracking-widest">1 Digit Close</h4>
-                                <button onClick={() => handleCopy(data.oneDigitClose)} className="bg-slate-700 hover:bg-slate-600 text-[10px] text-white px-3 py-1 rounded flex items-center gap-1 font-black uppercase">
-                                    {Icons.clipboardList} Copy
+                                <button 
+                                    onClick={() => handleCopy(data.oneDigitClose, 'oneDigitClose')} 
+                                    className={`px-3 py-1 rounded flex items-center gap-1 font-black uppercase text-[10px] transition-all ${copiedSection === 'oneDigitClose' ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
+                                >
+                                    {copiedSection === 'oneDigitClose' ? <>{Icons.checkCircle} COPIED</> : <>{Icons.clipboardList} Copy</>}
                                 </button>
                             </div>
                             <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
