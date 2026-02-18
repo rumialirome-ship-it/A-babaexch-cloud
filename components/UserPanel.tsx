@@ -158,15 +158,33 @@ const BettingModal: React.FC<{ game: Game | null, games: Game[], user: User, onC
         if (tabs.length > 0 && !tabs.includes(subType)) setSubType(tabs[0]); 
     }, [subType, user?.fixedStake, game, tabs]);
 
+    const handleNumsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const val = e.target.value;
+        const digits = val.replace(/\D/g, '');
+        let formatted = '';
+        
+        if (subType === SubGameType.TwoDigit) {
+            const matches = digits.match(/.{1,2}/g);
+            formatted = matches ? matches.join(', ') : '';
+        } else if (subType === SubGameType.OneDigitOpen || subType === SubGameType.OneDigitClose) {
+            const matches = digits.match(/.{1,1}/g);
+            formatted = matches ? matches.join(', ') : '';
+        } else {
+            formatted = val;
+        }
+        setManualNums(formatted);
+    };
+
     const finalCost = useMemo(() => {
         if (subType === SubGameType.Bulk) {
             let tc = 0; const lines = bulk.split('\n');
             lines.forEach(l => { const sm = l.match(/(?:rs|r)?\s*(\d+\.?\d*)$/i); const s = user?.fixedStake > 0 ? user.fixedStake : (sm ? parseFloat(sm[1]) : 0); const tokens = l.replace(/(?:rs|r)?\s*(\d+\.?\d*)$/i, '').split(/[-.,_*\/+<>=%;'\s]+/).filter(Boolean); tc += tokens.length * s; });
             return tc;
         }
-        const n = manualNums.replace(/\D/g, '').length / (subType === SubGameType.TwoDigit ? 2 : 1);
+        const digitsRaw = manualNums.replace(/\D/g, '');
+        const nCount = digitsRaw.length / (subType === SubGameType.TwoDigit ? 2 : 1);
         const s = user?.fixedStake > 0 ? user.fixedStake : parseFloat(manualAmt);
-        return (isNaN(n) || isNaN(s)) ? 0 : Math.floor(n) * s;
+        return (isNaN(nCount) || isNaN(s)) ? 0 : Math.floor(nCount) * s;
     }, [subType, bulk, manualNums, manualAmt, user?.fixedStake]);
 
     const handleBet = async () => {
@@ -229,7 +247,7 @@ const BettingModal: React.FC<{ game: Game | null, games: Game[], user: User, onC
                                 <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Bulk Terminal (Num RS)</label><textarea value={bulk} onChange={e => setBulk(e.target.value)} rows={5} placeholder={isAK || isAKC ? "Format: 4 50\n9 100" : "Format: 14, 05 50"} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white font-mono text-sm focus:ring-1 focus:ring-sky-500" /></div>
                             ) : (
                                 <>
-                                    <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Numbers</label><textarea value={manualNums} onChange={e => setManualNums(e.target.value)} rows={2} placeholder={isAK || isAKC ? "e.g. 4, 9" : "e.g. 14, 05"} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white font-mono text-sm focus:ring-1 focus:ring-sky-500" /></div>
+                                    <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Numbers</label><textarea value={manualNums} onChange={handleNumsChange} rows={2} placeholder={isAK || isAKC ? "e.g. 4, 9" : "e.g. 14, 05"} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white font-mono text-sm focus:ring-1 focus:ring-sky-500" /></div>
                                     <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Stake (Rs)</label><input type="number" value={user?.fixedStake > 0 ? user.fixedStake : manualAmt} onChange={e => setManualAmt(e.target.value)} disabled={user?.fixedStake > 0} className={`w-full p-4 rounded-xl border ${user?.fixedStake > 0 ? 'bg-red-500/10 border-red-500/30 text-red-400 font-black' : 'bg-slate-800 border-slate-700 text-white'} font-mono text-sm`} /></div>
                                 </>
                             )}
