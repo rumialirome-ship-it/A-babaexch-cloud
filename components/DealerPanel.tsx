@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType } from '../types';
+import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType, BetLimits } from '../types';
 import { Icons } from '../constants';
 import { useCountdown } from '../hooks/useCountdown';
 
@@ -68,7 +68,6 @@ const RevenueDashboard: React.FC<{ dealer: Dealer; bets: Bet[] }> = ({ dealer, b
 };
 
 const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
-    // SORT ENTRIES BY TIMESTAMP ASCENDING (OLDEST FIRST, NEWEST LAST)
     const sortedEntries = useMemo(() => {
         return [...entries].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     }, [entries]);
@@ -208,6 +207,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                                 <td className="p-4">
                                     <div className="font-black text-white text-sm uppercase">{user.name}</div>
                                     <div className="text-[10px] text-slate-500 font-mono uppercase">{user.id}</div>
+                                    {user.fixedStake > 0 && <div className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/30 px-1 inline-block mt-1">FIXED: Rs {user.fixedStake}</div>}
                                 </td>
                                 <td className="p-4">
                                     <div className="text-xs text-slate-300 font-bold uppercase">{user.area || 'UNSET'}</div>
@@ -330,13 +330,15 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
     const [commissionRate, setCommissionRate] = useState(user?.commissionRate || 5);
     const [initialDeposit, setInitialDeposit] = useState(0);
     const [prizeRates, setPrizeRates] = useState<PrizeRates>(user?.prizeRates || dealerPrizeRates);
+    const [betLimits, setBetLimits] = useState<BetLimits>(user?.betLimits || { oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });
+    const [fixedStake, setFixedStake] = useState(user?.fixedStake || 0);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const userData = { name, id, password, area, contact, commissionRate, prizeRates };
+            const userData = { name, id, password, area, contact, commissionRate, prizeRates, betLimits, fixedStake };
             await onSave(userData, user?.id, initialDeposit);
         } catch (e: any) {
             alert(e.message || "Operation failed");
@@ -371,8 +373,30 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
                     <input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
                 </div>
                 <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Fixed Stake Protocol (0 = Variable)</label>
+                    <input type="number" value={fixedStake} onChange={e => setFixedStake(Number(e.target.value))} className="w-full bg-slate-800 border border-rose-500/30 rounded-lg p-2.5 text-rose-400 font-black text-sm focus:ring-1 focus:ring-rose-500" />
+                </div>
+                <div>
                     <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Area / Location</label>
                     <input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800">
+                <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest">Risk Management (Max Stakes)</h4>
+                <div className="grid grid-cols-3 gap-2">
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit Limit</label>
+                        <input type="number" value={betLimits.oneDigit} onChange={e => setBetLimits({...betLimits, oneDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">2-Digit Limit</label>
+                        <input type="number" value={betLimits.twoDigit} onChange={e => setBetLimits({...betLimits, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Total Draw Limit</label>
+                        <input type="number" value={betLimits.perDraw} onChange={e => setBetLimits({...betLimits, perDraw: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" />
+                    </div>
                 </div>
             </div>
 
@@ -460,6 +484,7 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
             const lines = bulkInput.split('\n').filter(l => l.trim());
             const betGroupsMap = new Map();
 
+            const currentUser = users.find(u => u.id === selectedUserId);
             const currentGame = games.find(g => g.id === selectedGameId);
             const isAkcGame = currentGame?.name === 'AKC';
             const delimiterRegex = /[-.,_*\/+<>=%;'\s]+/;
@@ -467,10 +492,16 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
             lines.forEach(line => {
                 let currentLine = line.trim();
                 const stakeMatch = currentLine.match(/(?:rs|r)?\s*(\d+\.?\d*)$/i);
-                const stake = stakeMatch ? parseFloat(stakeMatch[1]) : 0;
+                let stake = stakeMatch ? parseFloat(stakeMatch[1]) : 0;
+                
+                // Override with user's Fixed Stake if active
+                if (currentUser && currentUser.fixedStake > 0) {
+                    stake = currentUser.fixedStake;
+                }
+
                 if (stake <= 0) return;
 
-                let betPart = currentLine.substring(0, stakeMatch!.index).trim();
+                let betPart = currentLine.substring(0, stakeMatch ? stakeMatch.index : currentLine.length).trim();
                 const isCombo = /\b(k|combo)\b/i.test(betPart);
                 betPart = betPart.replace(/\b(k|combo)\b/i, '').trim();
                 const tokens = betPart.split(delimiterRegex).filter(Boolean);

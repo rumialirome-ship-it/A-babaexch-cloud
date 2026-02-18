@@ -1,3 +1,4 @@
+
 export enum Role {
   Admin = 'ADMIN',
   Dealer = 'DEALER',
@@ -42,6 +43,7 @@ export interface User extends BaseAccount {
   dealerId: string;
   prizeRates: PrizeRates;
   betLimits: BetLimits;
+  fixedStake: number;
 }
 
 export interface Dealer extends BaseAccount {
