@@ -47,7 +47,7 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS daily_resets (reset_date TEXT PRIMARY KEY);
         `);
 
-        // Check if fixedStake exists (migration for existing DBs)
+        // Migration Check for FixedStake
         const tableInfo = db.prepare("PRAGMA table_info(users)").all();
         if (!tableInfo.find(c => c.name === 'fixedStake')) {
             db.exec("ALTER TABLE users ADD COLUMN fixedStake REAL DEFAULT 0");
@@ -92,16 +92,27 @@ const safeJsonParse = (str) => {
     try { return JSON.parse(str); } catch (e) { return str; }
 };
 
+const normalizeAccount = (account, table) => {
+    if (!account) return null;
+    const defaultPrizeRates = { oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 };
+    const defaultBetLimits = { oneDigit: 5000, twoDigit: 5000, perDraw: 20000 };
+
+    account.prizeRates = safeJsonParse(account.prizeRates) || defaultPrizeRates;
+    if (table === 'users' || table === 'users_table') {
+        account.betLimits = safeJsonParse(account.betLimits) || defaultBetLimits;
+        account.fixedStake = account.fixedStake || 0;
+    }
+    if (account.isRestricted !== undefined) account.isRestricted = !!account.isRestricted;
+    return account;
+};
+
 const findAccountById = (id, table, ledgerLimit = 100) => {
     if (!id) return null;
     const account = db.prepare(`SELECT * FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
     if (!account) return null;
     account.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT ?').all(id, ledgerLimit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
     if (table === 'games') account.isMarketOpen = isGameOpen(account.drawTime);
-    if (account.prizeRates) account.prizeRates = safeJsonParse(account.prizeRates);
-    if (account.betLimits) account.betLimits = safeJsonParse(account.betLimits);
-    if (account.isRestricted !== undefined) account.isRestricted = !!account.isRestricted;
-    return account;
+    return normalizeAccount(account, table);
 };
 
 const normNum = (n) => {
@@ -113,11 +124,8 @@ const normNum = (n) => {
 
 const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     if (!winningNumber || winningNumber.includes('_')) return 0;
-    
     const winStr = String(winningNumber).trim();
-    const winNorm = normNum(winStr);
     const paddedWin = (gameName !== 'AKC' && winStr.length === 1) ? '0' + winStr : winStr;
-
     let winningCount = 0;
     const nums = typeof bet.numbers === 'string' ? JSON.parse(bet.numbers) : bet.numbers;
 
@@ -127,406 +135,167 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
             if (paddedWin.length >= 1 && numNorm === normNum(paddedWin[0])) winningCount++;
         } else if (bet.subGameType === '1 Digit Close') {
             if (gameName === 'AKC') {
-                if (numNorm === winNorm) winningCount++;
-            } else {
-                if (paddedWin.length === 2 && numNorm === normNum(paddedWin[1])) winningCount++;
-            }
+                if (numNorm === normNum(paddedWin)) winningCount++;
+            } else if (paddedWin.length === 2 && numNorm === normNum(paddedWin[1])) winningCount++;
         } else {
-            if (numNorm === winNorm) winningCount++;
+            if (numNorm === normNum(paddedWin)) winningCount++;
         }
     });
 
     if (winningCount === 0) return 0;
     const rates = typeof prizeRates === 'string' ? safeJsonParse(prizeRates) : prizeRates;
     if (!rates) return 0;
-
     const rate = bet.subGameType === '1 Digit Open' ? (rates.oneDigitOpen || 0) : 
                 (bet.subGameType === '1 Digit Close' ? (rates.oneDigitClose || 0) : (rates.twoDigit || 0));
-    
     return winningCount * bet.amountPerNumber * rate;
 };
 
-const performDailyCleanup = () => {
-    const now = new Date();
-    if (now.getUTCHours() === 11 && now.getUTCMinutes() === 0) {
-        const todayStr = now.toISOString().split('T')[0];
-        const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
-        if (!alreadyDone) {
-            db.transaction(() => {
-                db.prepare('DELETE FROM bets').run();
-                db.prepare('UPDATE games SET winningNumber = NULL, payoutsApproved = 0').run();
-                db.prepare('INSERT INTO daily_resets (reset_date) VALUES (?)').run(todayStr);
-            })();
-        }
-    }
-};
-
-const getDetailedWinners = () => {
-    const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL').all();
-    const winners = [];
-
-    games.forEach(game => {
-        if (!game.winningNumber || game.winningNumber.includes('_')) return;
-        
-        const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(game.id);
-        bets.forEach(bet => {
-            const user = db.prepare('SELECT name, prizeRates, dealerId FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
-            if (!user) return;
-            
-            const dealer = db.prepare('SELECT name FROM dealers WHERE LOWER(id) = LOWER(?)').get(user.dealerId);
-            const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
-            
-            if (payout > 0) {
-                winners.push({
-                    id: bet.id,
-                    userName: user.name,
-                    userId: bet.userId,
-                    dealerName: dealer ? dealer.name : 'Unknown',
-                    dealerId: user.dealerId,
-                    gameName: game.name,
-                    winningNumber: game.winningNumber,
-                    payout: payout,
-                    timestamp: bet.timestamp
-                });
-            }
-        });
-    });
-
-    return winners.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-};
-
 module.exports = {
-    connect, findAccountById, performDailyCleanup, getDetailedWinners,
+    connect, findAccountById,
+    performDailyCleanup: () => {
+        const now = new Date();
+        if (now.getUTCHours() === 11 && now.getUTCMinutes() === 0) {
+            const todayStr = now.toISOString().split('T')[0];
+            const alreadyDone = db.prepare('SELECT 1 FROM daily_resets WHERE reset_date = ?').get(todayStr);
+            if (!alreadyDone) {
+                db.transaction(() => {
+                    db.prepare('DELETE FROM bets').run();
+                    db.prepare('UPDATE games SET winningNumber = NULL, payoutsApproved = 0').run();
+                    db.prepare('INSERT INTO daily_resets (reset_date) VALUES (?)').run(todayStr);
+                })();
+            }
+        }
+    },
     exportDatabaseState: () => {
         const admin = db.prepare('SELECT * FROM admins LIMIT 1').get();
-        if (admin) {
-            admin.prizeRates = safeJsonParse(admin.prizeRates);
-            admin.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(admin.id);
-        }
-        const dealers = db.prepare('SELECT * FROM dealers').all().map(d => ({
-            ...d,
-            prizeRates: safeJsonParse(d.prizeRates),
-            isRestricted: !!d.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(d.id)
-        }));
-        const users = db.prepare('SELECT * FROM users').all().map(u => ({
-            ...u,
-            prizeRates: safeJsonParse(u.prizeRates),
-            betLimits: safeJsonParse(u.betLimits),
-            isRestricted: !!u.isRestricted,
-            ledger: db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC').all(u.id)
-        }));
-        const games = db.prepare('SELECT * FROM games').all();
-        const bets = db.prepare('SELECT * FROM bets').all().map(b => ({
-            ...b,
-            numbers: safeJsonParse(b.numbers)
-        }));
-        return { admin, dealers, users, games, bets };
+        if (admin) admin.prizeRates = safeJsonParse(admin.prizeRates);
+        return {
+            admin,
+            dealers: db.prepare('SELECT * FROM dealers').all().map(d => normalizeAccount(d, 'dealers')),
+            users: db.prepare('SELECT * FROM users').all().map(u => normalizeAccount(u, 'users')),
+            games: db.prepare('SELECT * FROM games').all(),
+            bets: db.prepare('SELECT * FROM bets').all().map(b => ({...b, numbers: safeJsonParse(b.numbers)}))
+        };
     },
     findAccountForLogin: (loginId) => {
         const tables = [{ n: 'users', r: 'USER' }, { n: 'dealers', r: 'DEALER' }, { n: 'admins', r: 'ADMIN' }];
         for (const t of tables) {
             const acc = db.prepare(`SELECT * FROM ${t.n} WHERE LOWER(id) = LOWER(?)`).get(loginId);
-            if (acc) return { account: acc, role: t.r };
+            if (acc) return { account: normalizeAccount(acc, t.n), role: t.r };
         }
         return { account: null, role: null };
     },
     getAllFromTable: (table) => {
         return db.prepare(`SELECT * FROM ${table}`).all().map(a => {
-            if (a.prizeRates) a.prizeRates = safeJsonParse(a.prizeRates);
-            if (a.betLimits) a.betLimits = safeJsonParse(a.betLimits);
-            if (a.numbers) a.numbers = safeJsonParse(a.numbers);
-            if (table === 'games') a.isMarketOpen = isGameOpen(a.drawTime);
-            a.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT 50').all(a.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
-            return a;
+            const norm = normalizeAccount(a, table);
+            if (norm.numbers) norm.numbers = safeJsonParse(norm.numbers);
+            if (table === 'games') norm.isMarketOpen = isGameOpen(norm.drawTime);
+            return norm;
         });
     },
-    findUsersByDealerId: (dealerId) => {
-        return db.prepare('SELECT * FROM users WHERE LOWER(dealerId) = LOWER(?)').all(dealerId).map(u => {
-            u.prizeRates = safeJsonParse(u.prizeRates);
-            u.betLimits = safeJsonParse(u.betLimits);
-            u.isRestricted = !!u.isRestricted;
-            u.ledger = db.prepare('SELECT * FROM ledgers WHERE LOWER(accountId) = LOWER(?) ORDER BY timestamp DESC, rowid DESC LIMIT 50').all(u.id).map(l => ({...l, timestamp: new Date(l.timestamp)}));
-            return u;
-        });
-    },
-    findBetsByDealerId: (dealerId) => {
-        return db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?) ORDER BY timestamp DESC').all(dealerId).map(b => {
-            b.numbers = safeJsonParse(b.numbers);
-            b.timestamp = new Date(b.timestamp);
-            return b;
-        });
-    },
-    findBetsByUserId: (userId) => {
-        return db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC').all(userId).map(b => {
-            b.numbers = safeJsonParse(b.numbers);
-            b.timestamp = new Date(b.timestamp);
-            return b;
-        });
-    },
+    findUsersByDealerId: (dealerId) => db.prepare('SELECT * FROM users WHERE LOWER(dealerId) = LOWER(?)').all(dealerId).map(u => normalizeAccount(u, 'users')),
+    findBetsByDealerId: (dealerId) => db.prepare('SELECT * FROM bets WHERE LOWER(dealerId) = LOWER(?) ORDER BY timestamp DESC').all(dealerId).map(b => ({...b, numbers: safeJsonParse(b.numbers), timestamp: new Date(b.timestamp)})),
+    findBetsByUserId: (userId) => db.prepare('SELECT * FROM bets WHERE LOWER(userId) = LOWER(?) ORDER BY timestamp DESC').all(userId).map(b => ({...b, numbers: safeJsonParse(b.numbers), timestamp: new Date(b.timestamp)})),
     searchBets: (query, gameId, userId) => {
         let sql = 'SELECT * FROM bets WHERE 1=1';
         const params = [];
-        if (query) {
-            sql += ' AND numbers LIKE ?';
-            params.push(`%"${query}"%`);
-        }
-        if (gameId) {
-            sql += ' AND gameId = ?';
-            params.push(gameId);
-        }
-        if (userId) {
-            sql += ' AND LOWER(userId) = LOWER(?)';
-            params.push(userId);
-        }
+        if (query) { sql += ' AND numbers LIKE ?'; params.push(`%"${query}"%`); }
+        if (gameId) { sql += ' AND gameId = ?'; params.push(gameId); }
+        if (userId) { sql += ' AND LOWER(userId) = LOWER(?)'; params.push(userId); }
         sql += ' ORDER BY timestamp DESC';
-        return db.prepare(sql).all(...params).map(b => ({
-            ...b,
-            numbers: safeJsonParse(b.numbers),
-            timestamp: new Date(b.timestamp)
-        }));
+        return db.prepare(sql).all(...params).map(b => ({...b, numbers: safeJsonParse(b.numbers), timestamp: new Date(b.timestamp)}));
     },
     getNumberSummary: (filters) => {
         const { date, gameId, dealerId, query } = filters;
         let sql = 'SELECT * FROM bets WHERE 1=1';
         const params = [];
-
-        if (date) {
-            sql += ' AND timestamp LIKE ?';
-            params.push(`${date}%`);
-        }
-        if (gameId) {
-            sql += ' AND gameId = ?';
-            params.push(gameId);
-        }
-        if (dealerId) {
-            sql += ' AND LOWER(dealerId) = LOWER(?)';
-            params.push(dealerId);
-        }
-
+        if (date) { sql += ' AND timestamp LIKE ?'; params.push(`${date}%`); }
+        if (gameId) { sql += ' AND gameId = ?'; params.push(gameId); }
+        if (dealerId) { sql += ' AND LOWER(dealerId) = LOWER(?)'; params.push(dealerId); }
         const bets = db.prepare(sql).all(...params);
-        
-        const gameBreakdownMap = {};
-        const twoDigitMap = {};
-        const oneOpenMap = {};
-        const oneCloseMap = {};
-
-        const allGames = db.prepare('SELECT id, name FROM games').all();
-        const gameNames = {};
-        allGames.forEach(g => gameNames[g.id] = g.name);
-
+        const gameBreakdownMap = {}; const twoDigitMap = {}; const oneOpenMap = {}; const oneCloseMap = {};
+        const gameNames = {}; db.prepare('SELECT id, name FROM games').all().forEach(g => gameNames[g.id] = g.name);
         bets.forEach(b => {
-            const nums = safeJsonParse(b.numbers);
-            const stake = b.amountPerNumber;
-            const gName = gameNames[b.gameId] || 'Unknown';
-            gameBreakdownMap[gName] = (gameBreakdownMap[gName] || 0) + b.totalAmount;
-
+            const nums = safeJsonParse(b.numbers); const stake = b.amountPerNumber;
+            gameBreakdownMap[gameNames[b.gameId]] = (gameBreakdownMap[gameNames[b.gameId]] || 0) + b.totalAmount;
             nums.forEach(n => {
                 if (query && !n.includes(query)) return;
-                if (b.subGameType === '2 Digit' || b.subGameType === 'Bulk Game' || b.subGameType === 'Combo Game') {
-                    twoDigitMap[n] = (twoDigitMap[n] || 0) + stake;
-                } else if (b.subGameType === '1 Digit Open') {
-                    oneOpenMap[n] = (oneOpenMap[n] || 0) + stake;
-                } else if (b.subGameType === '1 Digit Close') {
-                    oneCloseMap[n] = (oneCloseMap[n] || 0) + stake;
-                }
+                if (b.subGameType.includes('2 Digit') || b.subGameType.includes('Bulk') || b.subGameType.includes('Combo')) twoDigitMap[n] = (twoDigitMap[n] || 0) + stake;
+                else if (b.subGameType === '1 Digit Open') oneOpenMap[n] = (oneOpenMap[n] || 0) + stake;
+                else if (b.subGameType === '1 Digit Close') oneCloseMap[n] = (oneCloseMap[n] || 0) + stake;
             });
         });
-
-        const sortMap = (map) => Object.entries(map)
-            .map(([num, total]) => ({ number: num, total }))
-            .sort((a, b) => b.total - a.total);
-
+        const sortMap = (map) => Object.entries(map).map(([number, total]) => ({ number, total })).sort((a, b) => b.total - a.total);
         return {
-            gameBreakdown: Object.entries(gameBreakdownMap)
-                .map(([name, total]) => ({ name, total }))
-                .sort((a, b) => b.total - a.total),
-            twoDigit: sortMap(twoDigitMap),
-            oneDigitOpen: sortMap(oneOpenMap),
-            oneDigitClose: sortMap(oneCloseMap)
+            gameBreakdown: Object.entries(gameBreakdownMap).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total),
+            twoDigit: sortMap(twoDigitMap), oneDigitOpen: sortMap(oneOpenMap), oneDigitClose: sortMap(oneCloseMap)
         };
     },
     createDealer: (d) => {
         const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
-        const wallet = parseFloat(d.wallet) || 0;
         db.transaction(() => {
-            db.prepare(`INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                d.id, d.name, d.password, d.area || '', d.contact || '', wallet, d.commissionRate || 10, 
-                d.prizeRates ? JSON.stringify(d.prizeRates) : defaultPrizeRates
+            db.prepare(`INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                d.id, d.name, d.password, d.area || '', d.contact || '', d.wallet || 0, d.commissionRate || 10, d.prizeRates ? JSON.stringify(d.prizeRates) : defaultPrizeRates
             );
-            if (wallet > 0) {
-                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), d.id.toLowerCase(), 'DEALER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
-                );
-            }
+            if (d.wallet > 0) db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), d.id.toLowerCase(), 'DEALER', new Date().toISOString(), 'Opening Deposit', 0, d.wallet, d.wallet);
         })();
     },
     createUser: (u) => {
         const defaultPrizeRates = JSON.stringify({ oneDigitOpen: 90, oneDigitClose: 90, twoDigit: 900 });
         const defaultBetLimits = JSON.stringify({ oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });
-        const wallet = parseFloat(u.wallet) || 0;
         db.transaction(() => {
-            db.prepare(`INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, prizeRates, betLimits, fixedStake) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                u.id, u.name, u.password, u.dealerId, u.area || '', u.contact || '', wallet, u.commissionRate || 5, 
-                u.prizeRates ? JSON.stringify(u.prizeRates) : defaultPrizeRates, 
-                u.betLimits ? JSON.stringify(u.betLimits) : defaultBetLimits,
-                u.fixedStake || 0
+            db.prepare(`INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, prizeRates, betLimits, fixedStake) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                u.id, u.name, u.password, u.dealerId, u.area || '', u.contact || '', u.wallet || 0, u.commissionRate || 5, u.prizeRates ? JSON.stringify(u.prizeRates) : defaultPrizeRates, u.betLimits ? JSON.stringify(u.betLimits) : defaultBetLimits, u.fixedStake || 0
             );
-            if (wallet > 0) {
-                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), u.id.toLowerCase(), 'USER', new Date().toISOString(), 'Opening Deposit', 0, wallet, wallet
-                );
-            }
+            if (u.wallet > 0) db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), u.id.toLowerCase(), 'USER', new Date().toISOString(), 'Opening Deposit', 0, u.wallet, u.wallet);
         })();
     },
-    updateUser: (id, u) => {
-        db.prepare('UPDATE users SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ?, betLimits = ?, fixedStake = ? WHERE LOWER(id) = LOWER(?)').run(
-            u.name, u.password, u.area, u.contact, u.commissionRate, JSON.stringify(u.prizeRates), JSON.stringify(u.betLimits), u.fixedStake || 0, id
-        );
-    },
-    updateDealer: (id, d) => {
-        db.prepare('UPDATE dealers SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ? WHERE LOWER(id) = LOWER(?)').run(
-            d.name, d.password, d.area, d.contact, d.commissionRate, JSON.stringify(d.prizeRates), id
-        );
-    },
+    updateUser: (id, u) => db.prepare('UPDATE users SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ?, betLimits = ?, fixedStake = ? WHERE LOWER(id) = LOWER(?)').run(u.name, u.password, u.area, u.contact, u.commissionRate, JSON.stringify(u.prizeRates), JSON.stringify(u.betLimits), u.fixedStake || 0, id),
+    updateDealer: (id, d) => db.prepare('UPDATE dealers SET name = ?, password = ?, area = ?, contact = ?, commissionRate = ?, prizeRates = ? WHERE LOWER(id) = LOWER(?)').run(d.name, d.password, d.area, d.contact, d.commissionRate, JSON.stringify(d.prizeRates), id),
     transferFunds: (senderId, senderTable, receiverId, receiverTable, amount, description) => {
         return db.transaction(() => {
             const sender = db.prepare(`SELECT wallet, name FROM ${senderTable} WHERE LOWER(id) = LOWER(?)`).get(senderId);
             const receiver = db.prepare(`SELECT wallet, name FROM ${receiverTable} WHERE LOWER(id) = LOWER(?)`).get(receiverId);
-            if (!sender) throw new Error('Sender account not found');
-            if (!receiver) throw new Error('Receiver account not found');
+            if (!sender || !receiver) throw new Error('Account not found');
             const amt = parseFloat(amount);
-            if (amt <= 0) throw new Error('Amount must be positive');
-            if (sender.wallet < amt) throw new Error('Insufficient wallet balance');
-
-            const newSenderBal = sender.wallet - amt;
-            const newReceiverBal = receiver.wallet + amt;
-
+            if (amt <= 0 || sender.wallet < amt) throw new Error('Invalid or insufficient funds');
+            const newSenderBal = sender.wallet - amt; const newReceiverBal = receiver.wallet + amt;
             db.prepare(`UPDATE ${senderTable} SET wallet = ? WHERE LOWER(id) = LOWER(?)`).run(newSenderBal, senderId);
             db.prepare(`UPDATE ${receiverTable} SET wallet = ? WHERE LOWER(id) = LOWER(?)`).run(newReceiverBal, receiverId);
-
-            const timestamp = new Date().toISOString();
-            const senderType = senderTable.toUpperCase().slice(0, -1);
-            const receiverType = receiverTable.toUpperCase().slice(0, -1);
-
-            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                uuidv4(), senderId.toLowerCase(), senderType, timestamp, `${description} to ${receiver.name} (${receiverId})`, amt, 0, newSenderBal
-            );
-            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                uuidv4(), receiverId.toLowerCase(), receiverType, timestamp, `${description} from ${sender.name} (${senderId})`, 0, amt, newReceiverBal
-            );
-
+            const ts = new Date().toISOString(); const st = senderTable.toUpperCase().slice(0, -1); const rt = receiverTable.toUpperCase().slice(0, -1);
+            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), senderId.toLowerCase(), st, ts, `${description} to ${receiver.name} (${receiverId})`, amt, 0, newSenderBal);
+            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), receiverId.toLowerCase(), rt, ts, `${description} from ${sender.name} (${senderId})`, 0, amt, newReceiverBal);
             return { senderBalance: newSenderBal, receiverBalance: newReceiverBal };
-        })();
-    },
-    updateWallet: (id, table, amount, type, actorId) => {
-        return db.transaction(() => {
-            const acc = db.prepare(`SELECT wallet FROM ${table} WHERE LOWER(id) = LOWER(?)`).get(id);
-            if (!acc) throw new Error('Account not found');
-            const amt = parseFloat(amount);
-            const newBalance = type === 'credit' ? acc.wallet + amt : acc.wallet - amt;
-            if (newBalance < 0) throw new Error('Insufficient funds');
-            
-            db.prepare(`UPDATE ${table} SET wallet = ? WHERE LOWER(id) = LOWER(?)`).run(newBalance, id);
-            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                uuidv4(), id.toLowerCase(), table.toUpperCase().slice(0, -1), new Date().toISOString(), 
-                `${type === 'credit' ? 'Manual Credit' : 'Manual Debit'} by ${actorId}`, 
-                type === 'debit' ? amt : 0, type === 'credit' ? amt : 0, newBalance
-            );
-            return newBalance;
         })();
     },
     placeBet: (userId, data) => {
         return db.transaction(() => {
             const user = db.prepare('SELECT * FROM users WHERE LOWER(id) = LOWER(?)').get(userId);
-            if (!user) throw new Error('User not found');
             const dealer = db.prepare('SELECT * FROM dealers WHERE LOWER(id) = LOWER(?)').get(user.dealerId);
-            if (!dealer) throw new Error('Dealer not found');
-
             const limits = safeJsonParse(user.betLimits) || { oneDigit: 10000, twoDigit: 10000, perDraw: 50000 };
-            
             const processBet = (gameId, betGroups) => {
                 const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
-                if (!game) throw new Error(`Game ${gameId} not found`);
                 if (!isGameOpen(game.drawTime)) throw new Error(`Market for ${game.name} is closed`);
-
                 let totalCost = 0;
                 betGroups.forEach(bg => {
-                    // Force Fixed Stake if defined
-                    if (user.fixedStake > 0) {
-                        bg.amountPerNumber = user.fixedStake;
-                    }
+                    if (user.fixedStake > 0) bg.amountPerNumber = user.fixedStake;
                     totalCost += bg.numbers.length * bg.amountPerNumber;
-
-                    // CHECK INDIVIDUAL NUMBER LIMITS
                     bg.numbers.forEach(num => {
-                        const isOneDigit = bg.subGameType.includes('1 Digit');
-                        const limit = isOneDigit ? limits.oneDigit : limits.twoDigit;
-                        
-                        // Query existing volume for this number in this game
+                        const limit = bg.subGameType.includes('1 Digit') ? limits.oneDigit : limits.twoDigit;
                         const existing = db.prepare('SELECT SUM(amountPerNumber) as sum FROM bets WHERE userId = ? AND gameId = ? AND numbers LIKE ?').get(userId, gameId, `%${num}%`);
-                        const currentVol = (existing.sum || 0) + bg.amountPerNumber;
-                        
-                        if (currentVol > limit) {
-                            throw new Error(`Limit Exceeded: ${num} is capped at Rs ${limit}. (Current: ${currentVol})`);
-                        }
+                        if (((existing.sum || 0) + bg.amountPerNumber) > limit) throw new Error(`Limit Exceeded for ${num}`);
                     });
                 });
-
-                // CHECK TOTAL DRAW LIMIT
-                const existingDrawVolume = db.prepare('SELECT SUM(totalAmount) as sum FROM bets WHERE userId = ? AND gameId = ?').get(userId, gameId);
-                const newTotalDrawVol = (existingDrawVolume.sum || 0) + totalCost;
-                if (newTotalDrawVol > limits.perDraw) {
-                    throw new Error(`Market Limit Exceeded: Max total for ${game.name} is Rs ${limits.perDraw}.`);
-                }
-
-                const currentBalance = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(userId).wallet;
-                if (currentBalance < totalCost) throw new Error('Insufficient wallet balance');
-
-                const afterBetBalance = currentBalance - totalCost;
-                db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterBetBalance, userId);
-                
-                const timestamp = new Date().toISOString();
-                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    uuidv4(), userId.toLowerCase(), 'USER', timestamp, `Play Amount Deducted: ${game.name}`, totalCost, 0, afterBetBalance
-                );
-
-                const userComm = totalCost * (user.commissionRate / 100);
-                if (userComm > 0) {
-                    const afterCommBalance = afterBetBalance + userComm;
-                    db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterCommBalance, userId);
-                    const commTimestamp = new Date(new Date(timestamp).getTime() + 1).toISOString();
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), userId.toLowerCase(), 'USER', commTimestamp, `Play Commission Added: ${game.name}`, 0, userComm, afterCommBalance
-                    );
-                }
-
-                const dealerComm = totalCost * (dealer.commissionRate / 100);
-                if (dealerComm > 0) {
-                    const currentDealerWallet = db.prepare('SELECT wallet FROM dealers WHERE LOWER(id) = LOWER(?)').get(dealer.id).wallet;
-                    const afterDealerBalance = currentDealerWallet + dealerComm;
-                    db.prepare('UPDATE dealers SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterDealerBalance, dealer.id);
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), dealer.id.toLowerCase(), 'DEALER', new Date().toISOString(), `Network Comm: ${user.name} [${game.name}]`, 0, dealerComm, afterDealerBalance
-                    );
-                }
-
-                betGroups.forEach(bg => {
-                    db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) 
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                        uuidv4(), userId.toLowerCase(), user.dealerId.toLowerCase(), gameId, bg.subGameType, JSON.stringify(bg.numbers), 
-                        bg.amountPerNumber, bg.numbers.length * bg.amountPerNumber, new Date().toISOString()
-                    );
-                });
+                const currentTotal = db.prepare('SELECT SUM(totalAmount) as sum FROM bets WHERE userId = ? AND gameId = ?').get(userId, gameId);
+                if (((currentTotal.sum || 0) + totalCost) > limits.perDraw) throw new Error(`Draw Limit Exceeded for ${game.name}`);
+                if (user.wallet < totalCost) throw new Error('Insufficient wallet balance');
+                const afterBet = user.wallet - totalCost; db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(afterBet, userId);
+                const ts = new Date().toISOString(); db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), userId.toLowerCase(), 'USER', ts, `Play: ${game.name}`, totalCost, 0, afterBet);
+                const uc = totalCost * (user.commissionRate / 100); if (uc > 0) { const ac = afterBet + uc; db.prepare('UPDATE users SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(ac, userId); db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), userId.toLowerCase(), 'USER', new Date(new Date(ts).getTime()+1).toISOString(), `Comm: ${game.name}`, 0, uc, ac); }
+                const dc = totalCost * (dealer.commissionRate / 100); if (dc > 0) { const dw = db.prepare('SELECT wallet FROM dealers WHERE LOWER(id) = LOWER(?)').get(dealer.id).wallet + dc; db.prepare('UPDATE dealers SET wallet = ? WHERE LOWER(id) = LOWER(?)').run(dw, dealer.id); db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), dealer.id.toLowerCase(), 'DEALER', ts, `Network Comm: ${user.name}`, 0, dc, dw); }
+                betGroups.forEach(bg => db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(uuidv4(), userId.toLowerCase(), user.dealerId.toLowerCase(), gameId, bg.subGameType, JSON.stringify(bg.numbers), bg.amountPerNumber, bg.numbers.length * bg.amountPerNumber, ts));
             };
-
-            if (data.isMultiGame) {
-                Object.entries(data.multiGameBets).forEach(([gid, gdata]) => processBet(gid, gdata.betGroups));
-            } else {
-                processBet(data.gameId, data.betGroups);
-            }
+            if (data.isMultiGame) Object.entries(data.multiGameBets).forEach(([gid, gdata]) => processBet(gid, gdata.betGroups)); else processBet(data.gameId, data.betGroups);
             return { success: true };
         })();
     },
@@ -534,151 +303,52 @@ module.exports = {
         const games = db.prepare('SELECT * FROM games').all();
         const summaries = games.map(g => {
             const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(g.id);
-            let stake = 0, payouts = 0, userCommTotal = 0, dealerCommTotal = 0;
-            
+            let stake = 0, payouts = 0, userComm = 0, dealerComm = 0;
             bets.forEach(b => {
                 stake += b.totalAmount;
                 const user = db.prepare('SELECT commissionRate, prizeRates FROM users WHERE LOWER(id) = LOWER(?)').get(b.userId);
                 const dealer = db.prepare('SELECT commissionRate FROM dealers WHERE LOWER(id) = LOWER(?)').get(b.dealerId);
-                
-                if (user) userCommTotal += b.totalAmount * (user.commissionRate / 100);
-                if (dealer) dealerCommTotal += b.totalAmount * (dealer.commissionRate / 100);
-                
-                if (g.winningNumber && !g.winningNumber.includes('_') && user) {
-                    payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
-                }
+                if (user) userComm += b.totalAmount * (user.commissionRate / 100);
+                if (dealer) dealerComm += b.totalAmount * (dealer.commissionRate / 100);
+                if (g.winningNumber && !g.winningNumber.includes('_') && user) payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
             });
-
-            return { 
-                gameId: g.id,
-                gameName: g.name, 
-                winningNumber: g.winningNumber || '-', 
-                totalStake: stake, 
-                totalPayouts: payouts, 
-                userCommission: userCommTotal,
-                dealerCommission: dealerCommTotal,
-                netProfit: stake - payouts - userCommTotal - dealerCommTotal 
-            };
+            return { gameId: g.id, gameName: g.name, winningNumber: g.winningNumber || '-', totalStake: stake, totalPayouts: payouts, userCommission: userComm, dealerCommission: dealerComm, netProfit: stake - payouts - userComm - dealerComm };
         });
-
-        return { 
-            games: summaries, 
-            totals: summaries.reduce((acc, s) => ({
-                totalStake: acc.totalStake + s.totalStake,
-                totalPayouts: acc.totalPayouts + s.totalPayouts,
-                totalUserCommission: acc.totalUserCommission + s.userCommission,
-                totalDealerCommission: acc.totalDealerCommission + s.dealerCommission,
-                netProfit: acc.netProfit + s.netProfit
-            }), { totalStake: 0, totalPayouts: 0, totalUserCommission: 0, totalDealerCommission: 0, netProfit: 0 }) 
-        };
+        return { games: summaries, totals: summaries.reduce((acc, s) => ({ totalStake: acc.totalStake + s.totalStake, totalPayouts: acc.totalPayouts + s.totalPayouts, totalUserCommission: acc.totalUserCommission + s.userCommission, totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, netProfit: acc.netProfit + s.netProfit }), { totalStake: 0, totalPayouts: 0, totalUserCommission: 0, totalDealerCommission: 0, netProfit: 0 }) };
     },
-    getLiveStats: () => {
-        const bets = db.prepare('SELECT * FROM bets').all();
-        const dealerMap = {};
-        const gameMap = {};
-        const dealers = db.prepare('SELECT id, name FROM dealers').all();
-        const games = db.prepare('SELECT id, name FROM games').all();
-        
-        dealers.forEach(d => { dealerMap[d.id] = { name: d.name, total: 0 }; });
-        games.forEach(g => { 
-            gameMap[g.id] = { 
-                name: g.name, 
-                categories: {
-                    'Total': {},
-                    '2 Digit': {},
-                    '1 Digit Open': {},
-                    '1 Digit Close': {}
-                }
-            }; 
+    getDetailedWinners: () => {
+        const winners = [];
+        db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL').all().forEach(game => {
+            if (!game.winningNumber || game.winningNumber.includes('_')) return;
+            db.prepare('SELECT * FROM bets WHERE gameId = ?').all(game.id).forEach(bet => {
+                const user = db.prepare('SELECT name, prizeRates, dealerId FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
+                if (!user) return;
+                const payout = calculatePayout(bet, game.winningNumber, game.name, user.prizeRates);
+                if (payout > 0) winners.push({ id: bet.id, userName: user.name, userId: bet.userId, dealerName: db.prepare('SELECT name FROM dealers WHERE LOWER(id) = LOWER(?)').get(user.dealerId)?.name || 'Unknown', dealerId: user.dealerId, gameName: game.name, winningNumber: game.winningNumber, payout, timestamp: bet.timestamp });
+            });
         });
-        
-        const typeStats = { '1 Digit Open': 0, '1 Digit Close': 0, '2 Digit': 0, 'Bulk Game': 0, 'Combo Game': 0 };
-        const userMap = {};
-        
-        bets.forEach(b => {
-            if (dealerMap[b.dealerId]) dealerMap[b.dealerId].total += b.totalAmount;
-            if (typeStats[b.subGameType] !== undefined) typeStats[b.subGameType] += b.totalAmount;
-            if (!userMap[b.userId]) {
-                const u = db.prepare('SELECT name FROM users WHERE LOWER(id) = LOWER(?)').get(b.userId);
-                userMap[b.userId] = { name: u ? u.name : b.userId, total: 0 };
-            }
-            userMap[b.userId].total += b.totalAmount;
-            
-            if (gameMap[b.gameId]) {
-                const nums = safeJsonParse(b.numbers);
-                const stake = b.amountPerNumber;
-                let catName = '2 Digit';
-                if (b.subGameType === '1 Digit Open') catName = '1 Digit Open';
-                else if (b.subGameType === '1 Digit Close') catName = '1 Digit Close';
-
-                nums.forEach(n => {
-                    gameMap[b.gameId].categories[catName][n] = (gameMap[b.gameId].categories[catName][n] || 0) + stake;
-                    gameMap[b.gameId].categories['Total'][n] = (gameMap[b.gameId].categories['Total'][n] || 0) + stake;
-                });
-            }
-        });
-        
-        const transformMapToSortedArray = (map) => Object.entries(map)
-            .map(([number, total]) => ({ number, total }))
-            .sort((a, b) => b.total - a.total);
-
-        return {
-            dealerBookings: Object.entries(dealerMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total),
-            typeBookings: Object.entries(typeStats).map(([type, total]) => ({ type, total })),
-            topPlayers: Object.entries(userMap).map(([id, data]) => ({ id, name: data.name, total: data.total })).sort((a,b) => b.total - a.total).slice(0, 10),
-            gameBreakdown: Object.entries(gameMap)
-                .map(([id, data]) => ({ 
-                    id, 
-                    name: data.name, 
-                    views: {
-                        'Total': transformMapToSortedArray(data.categories['Total']),
-                        '2 Digit': transformMapToSortedArray(data.categories['2 Digit']),
-                        '1 Digit Open': transformMapToSortedArray(data.categories['1 Digit Open']),
-                        '1 Digit Close': transformMapToSortedArray(data.categories['1 Digit Close'])
-                    }
-                }))
-                .filter(g => g.views['Total'].length > 0)
-        };
+        return winners.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     },
     updateGameDrawTime: (gameId, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, gameId),
     declareWinner: (gameId, num) => {
-        return db.transaction(() => {
-            const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
-            if (!game) return { success: false };
-            
-            let val = String(num).trim();
-            if (game.name !== 'AKC' && val.length === 1 && val !== '') {
-                val = '0' + val;
-            }
-
-            db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
-            
-            return { success: true };
-        })();
+        let val = String(num).trim();
+        const gName = db.prepare('SELECT name FROM games WHERE id = ?').get(gameId).name;
+        if (gName !== 'AKC' && val.length === 1 && val !== '') val = '0' + val;
+        db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
+        return { success: true };
     },
     approvePayouts: (gameId) => {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
             if (!game || !game.winningNumber || game.winningNumber.includes('_') || game.payoutsApproved) return { success: false };
-            
-            const betsWithUsers = db.prepare(`
-                SELECT b.*, u.prizeRates 
-                FROM bets b 
-                JOIN users u ON LOWER(b.userId) = LOWER(u.id) 
-                WHERE b.gameId = ?
-            `).all(gameId);
-
-            betsWithUsers.forEach(bet => {
+            db.prepare('SELECT b.*, u.prizeRates FROM bets b JOIN users u ON LOWER(b.userId) = LOWER(u.id) WHERE b.gameId = ?').all(gameId).forEach(bet => {
                 const payout = calculatePayout(bet, game.winningNumber, game.name, bet.prizeRates);
                 if (payout > 0) {
                     db.prepare('UPDATE users SET wallet = wallet + ? WHERE LOWER(id) = LOWER(?)').run(payout, bet.userId);
-                    const newUser = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId);
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                        uuidv4(), bet.userId.toLowerCase(), 'USER', new Date().toISOString(), `Draw Winner: ${game.name} (${game.winningNumber})`, 0, payout, newUser.wallet
-                    );
+                    const nw = db.prepare('SELECT wallet FROM users WHERE LOWER(id) = LOWER(?)').get(bet.userId).wallet;
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId.toLowerCase(), 'USER', new Date().toISOString(), `Draw Winner: ${game.name} (${game.winningNumber})`, 0, payout, nw);
                 }
             });
-            
             db.prepare('UPDATE games SET payoutsApproved = 1 WHERE id = ?').run(gameId);
             return { success: true };
         })();
@@ -688,9 +358,7 @@ module.exports = {
         const newVal = acc.isRestricted ? 0 : 1;
         db.transaction(() => {
             db.prepare(`UPDATE ${table} SET isRestricted = ? WHERE LOWER(id) = LOWER(?)`).run(newVal, id);
-            if (table === 'dealers') {
-                db.prepare(`UPDATE users SET isRestricted = ? WHERE LOWER(dealerId) = LOWER(?)`).run(newVal, id);
-            }
+            if (table === 'dealers') db.prepare(`UPDATE users SET isRestricted = ? WHERE LOWER(dealerId) = LOWER(?)`).run(newVal, id);
         })();
     },
     deleteUser: (id) => db.prepare('DELETE FROM users WHERE LOWER(id) = LOWER(?)').run(id)
