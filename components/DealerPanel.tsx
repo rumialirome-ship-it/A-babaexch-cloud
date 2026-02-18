@@ -1,8 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType, BetLimits } from '../types';
 import { Icons } from '../constants';
-import { useCountdown } from '../hooks/useCountdown';
 
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'md' | 'lg' | 'xl'; themeColor?: string }> = ({ isOpen, onClose, title, children, size = 'md', themeColor = 'emerald' }) => {
     if (!isOpen) return null;
@@ -210,7 +208,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                         </div>
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase">
                             <span className="text-slate-400">{user.area || 'No Place'} • {user.commissionRate}% Comm.</span>
-                            <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded border ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button>
+                            <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded border ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setViewingUserLedgerFor(user)} className="flex-1 bg-slate-900 border border-slate-700 py-3 rounded-lg text-[10px] font-black text-cyan-400 uppercase active:scale-95 transition-all">Audit Ledger</button>
@@ -255,7 +253,6 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                         </tbody>
                     </table>
                 </div>
-                {/* Mobile Ticket View */}
                 <div className="sm:hidden divide-y divide-slate-800">
                     {(bets || []).slice().reverse().map(bet => (
                         <div key={bet.id} className="p-4 space-y-2">
