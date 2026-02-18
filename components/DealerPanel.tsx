@@ -179,7 +179,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                     <thead className="bg-slate-800/80 border-b border-slate-700">
                         <tr>
                             <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Identity</th>
-                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Geography</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Place</th>
                             <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Liquidity Pool</th>
                             <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Comm. %</th>
                             <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Protocol</th>
@@ -209,8 +209,8 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                             <div className="text-right"><div className="font-mono text-emerald-400 font-black text-sm">Rs {user.wallet.toLocaleString()}</div><div className="text-[8px] text-slate-500 uppercase font-black">Portfolio</div></div>
                         </div>
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase">
-                            <span className="text-slate-400">{user.area || 'No Area'} • {user.commissionRate}% Comm.</span>
-                            <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded border ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button>
+                            <span className="text-slate-400">{user.area || 'No Place'} • {user.commissionRate}% Comm.</span>
+                            <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded border ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setViewingUserLedgerFor(user)} className="flex-1 bg-slate-900 border border-slate-700 py-3 rounded-lg text-[10px] font-black text-cyan-400 uppercase active:scale-95 transition-all">Audit Ledger</button>
@@ -325,7 +325,12 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
                 <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Pass-Key</label><input type="text" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
                 {!user && <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Initial Bank</label><input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>}
                 <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Comm. %</label><input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Fixed Stake (0=Var)</label><input type="number" value={fixedStake} onChange={e => setFixedStake(Number(e.target.value))} className="w-full bg-slate-800 border border-rose-500/30 rounded-lg p-2.5 text-rose-400 font-black text-sm focus:ring-1 focus:ring-rose-500" /></div>
+                <div>
+                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1 text-rose-400">Fixed Bet Option (0=Var)</label>
+                    <input type="number" value={fixedStake} onChange={e => setFixedStake(Number(e.target.value))} placeholder="Amount" className="w-full bg-slate-800 border border-rose-500/30 rounded-lg p-2.5 text-rose-400 font-black text-sm focus:ring-1 focus:ring-rose-500" />
+                </div>
+                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Place (City/Area)</label><input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
+                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Contact Number</label><input type="text" value={contact} onChange={e => setContact(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
             </div>
             <div className="pt-4 border-t border-slate-800">
                 <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest">Risk Management Limits</h4>

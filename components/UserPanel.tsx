@@ -248,7 +248,11 @@ const BettingModal: React.FC<{ game: Game | null, games: Game[], user: User, onC
                             ) : (
                                 <>
                                     <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Numbers</label><textarea value={manualNums} onChange={handleNumsChange} rows={2} placeholder={isAK || isAKC ? "e.g. 4, 9" : "e.g. 14, 05"} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white font-mono text-sm focus:ring-1 focus:ring-sky-500" /></div>
-                                    <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Stake (Rs)</label><input type="number" value={user?.fixedStake > 0 ? user.fixedStake : manualAmt} onChange={e => setManualAmt(e.target.value)} disabled={user?.fixedStake > 0} className={`w-full p-4 rounded-xl border ${user?.fixedStake > 0 ? 'bg-red-500/10 border-red-500/30 text-red-400 font-black' : 'bg-slate-800 border-slate-700 text-white'} font-mono text-sm`} /></div>
+                                    <div>
+                                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">{user?.fixedStake > 0 ? 'FIXED STAKE PROTOCOL' : 'Stake (Rs)'}</label>
+                                        <input type="number" value={user?.fixedStake > 0 ? user.fixedStake : manualAmt} onChange={e => setManualAmt(e.target.value)} disabled={user?.fixedStake > 0} className={`w-full p-4 rounded-xl border ${user?.fixedStake > 0 ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 font-black' : 'bg-slate-800 border-slate-700 text-white'} font-mono text-sm shadow-inner transition-all`} />
+                                        {user?.fixedStake > 0 && <p className="text-[8px] text-rose-500 font-bold uppercase mt-1">Staking amount restricted by dealer.</p>}
+                                    </div>
                                 </>
                             )}
                             <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 flex justify-between items-center"><div className="text-left"><div className="text-[8px] text-slate-500 font-black uppercase">Total Bet</div><div className="text-xl font-black text-white font-mono">Rs {finalCost}</div></div><div className="text-right"><div className="text-[8px] text-slate-500 font-black uppercase">Wallet</div><div className="text-sm font-black text-emerald-400">Rs {user?.wallet?.toLocaleString() || 0}</div></div></div>
