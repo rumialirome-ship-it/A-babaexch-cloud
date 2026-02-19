@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
@@ -25,7 +26,7 @@ function main() {
     const createSchema = () => {
         db.exec(`
             CREATE TABLE admins (
-                id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
                 name TEXT NOT NULL,
                 password TEXT NOT NULL,
                 wallet REAL NOT NULL,
@@ -33,7 +34,7 @@ function main() {
                 avatarUrl TEXT
             );
             CREATE TABLE dealers (
-                id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
                 name TEXT NOT NULL,
                 password TEXT NOT NULL,
                 area TEXT,
@@ -45,10 +46,10 @@ function main() {
                 avatarUrl TEXT
             );
             CREATE TABLE users (
-                id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
                 name TEXT NOT NULL,
                 password TEXT NOT NULL,
-                dealerId TEXT NOT NULL,
+                dealerId TEXT NOT NULL COLLATE NOCASE,
                 area TEXT,
                 contact TEXT,
                 wallet REAL NOT NULL,
@@ -56,21 +57,22 @@ function main() {
                 isRestricted INTEGER NOT NULL DEFAULT 0,
                 prizeRates TEXT NOT NULL,
                 betLimits TEXT,
+                fixedStake REAL DEFAULT 0,
                 avatarUrl TEXT,
                 FOREIGN KEY (dealerId) REFERENCES dealers(id)
             );
             CREATE TABLE games (
-                id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
                 name TEXT NOT NULL,
                 drawTime TEXT NOT NULL,
                 winningNumber TEXT,
                 payoutsApproved INTEGER DEFAULT 0
             );
             CREATE TABLE bets (
-                id TEXT PRIMARY KEY,
-                userId TEXT NOT NULL,
-                dealerId TEXT NOT NULL,
-                gameId TEXT NOT NULL,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
+                userId TEXT NOT NULL COLLATE NOCASE,
+                dealerId TEXT NOT NULL COLLATE NOCASE,
+                gameId TEXT NOT NULL COLLATE NOCASE,
                 subGameType TEXT NOT NULL,
                 numbers TEXT NOT NULL,
                 amountPerNumber REAL NOT NULL,
@@ -81,8 +83,8 @@ function main() {
                 FOREIGN KEY (gameId) REFERENCES games(id)
             );
             CREATE TABLE ledgers (
-                id TEXT PRIMARY KEY,
-                accountId TEXT NOT NULL,
+                id TEXT PRIMARY KEY COLLATE NOCASE,
+                accountId TEXT NOT NULL COLLATE NOCASE,
                 accountType TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 description TEXT NOT NULL,
@@ -90,12 +92,8 @@ function main() {
                 credit REAL NOT NULL,
                 balance REAL NOT NULL
             );
-            CREATE TABLE number_limits (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                gameType TEXT NOT NULL,
-                numberValue TEXT NOT NULL,
-                limitAmount REAL NOT NULL,
-                UNIQUE(gameType, numberValue)
+            CREATE TABLE daily_resets (
+                reset_date TEXT PRIMARY KEY
             );
             CREATE INDEX idx_ledgers_accountId ON ledgers(accountId);
             CREATE INDEX idx_bets_userId ON bets(userId);
@@ -107,7 +105,7 @@ function main() {
     const migrateData = () => {
         const insertAdmin = db.prepare('INSERT INTO admins (id, name, password, wallet, prizeRates, avatarUrl) VALUES (?, ?, ?, ?, ?, ?)');
         const insertDealer = db.prepare('INSERT INTO dealers (id, name, password, area, contact, wallet, commissionRate, isRestricted, prizeRates, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        const insertUser = db.prepare('INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, isRestricted, prizeRates, betLimits, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        const insertUser = db.prepare('INSERT INTO users (id, name, password, dealerId, area, contact, wallet, commissionRate, isRestricted, prizeRates, betLimits, fixedStake, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         const insertGame = db.prepare('INSERT INTO games (id, name, drawTime, winningNumber, payoutsApproved) VALUES (?, ?, ?, ?, ?)');
         const insertBet = db.prepare('INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
         const insertLedger = db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -126,7 +124,7 @@ function main() {
 
             // Users
             jsonData.users.forEach(user => {
-                insertUser.run(user.id, user.name, user.password, user.dealerId, user.area, user.contact, user.wallet, user.commissionRate, user.isRestricted ? 1 : 0, JSON.stringify(user.prizeRates), user.betLimits ? JSON.stringify(user.betLimits) : null, user.avatarUrl);
+                insertUser.run(user.id, user.name, user.password, user.dealerId, user.area, user.contact, user.wallet, user.commissionRate, user.isRestricted ? 1 : 0, JSON.stringify(user.prizeRates), user.betLimits ? JSON.stringify(user.betLimits) : null, user.fixedStake || 0, user.avatarUrl);
                 user.ledger.forEach(l => insertLedger.run(uuidv4(), user.id, 'USER', new Date(l.timestamp).toISOString(), l.description, l.debit, l.credit, l.balance));
             });
 
@@ -148,11 +146,9 @@ function main() {
         createSchema();
         migrateData();
         console.error('\nDatabase setup successful!');
-        console.error('You can now start the server.');
-        console.error('It is safe to delete the db.json file.');
     } catch (error) {
         console.error('An error occurred during database setup:', error);
-        fs.unlinkSync(DB_PATH); // Clean up failed DB creation
+        if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH); 
     } finally {
         db.close();
     }

@@ -276,7 +276,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
       )}
       {activeTab === 'wallet' && <div className="animate-fade-in space-y-6"><h3 className="text-xl font-black text-white uppercase tracking-widest">Agency Financial Ledger</h3><LedgerTable entries={dealer.ledger} /></div>}
 
-      <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title={selectedUser ? "Modify Account" : "Register Player"} themeColor="emerald">
+      <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title={selectedUser ? "Modify Account" : "Onboard New User"} size="lg" themeColor="emerald">
           <UserForm user={selectedUser} onSave={async (u, o, i) => { await onSaveUser(u, o, i); setIsUserModalOpen(false); showToast(selectedUser ? "Account Updated" : "Account Created", "success"); }} onCancel={() => setIsUserModalOpen(false)} dealerPrizeRates={dealer.prizeRates} />
       </Modal>
 
@@ -297,49 +297,134 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
     const [name, setName] = useState(user?.name || '');
     const [id, setId] = useState(user?.id || '');
     const [password, setPassword] = useState(user?.password || '');
+    const [confirmPassword, setConfirmPassword] = useState(user?.password || '');
     const [area, setArea] = useState(user?.area || '');
     const [contact, setContact] = useState(user?.contact || '');
-    const [commissionRate, setCommissionRate] = useState(user?.commissionRate || 5);
+    const [commissionRate, setCommissionRate] = useState(user?.commissionRate || 0);
     const [initialDeposit, setInitialDeposit] = useState(0);
     const [prizeRates, setPrizeRates] = useState<PrizeRates>(user?.prizeRates || dealerPrizeRates);
-    const [betLimits, setBetLimits] = useState<BetLimits>(user?.betLimits || { oneDigit: 5000, twoDigit: 5000, perDraw: 20000 });
+    const [betLimits, setBetLimits] = useState<BetLimits>(user?.betLimits || { oneDigit: 1000, twoDigit: 5000, perDraw: 20000 });
     const [fixedStake, setFixedStake] = useState(user?.fixedStake || 0);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError(null);
+
+        if (password !== confirmPassword) {
+            setError("Passwords do not match.");
+            return;
+        }
+
         setLoading(true);
         try {
             await onSave({ name, id, password, area, contact, commissionRate, prizeRates, betLimits, fixedStake }, user?.id, initialDeposit);
-        } catch (e: any) { alert(e.message || "Action failed"); } finally { setLoading(false); }
+        } catch (e: any) { 
+            setError(e.message || "Action failed"); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Full Name</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Account ID</label><input type="text" value={id} onChange={e => setId(e.target.value)} required disabled={!!user} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500 disabled:opacity-50" /></div>
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Pass-Key</label><input type="text" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-                {!user && <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Initial Bank</label><input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>}
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Comm. %</label><input type="number" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-                <div>
-                    <label className="block text-[10px] text-slate-500 font-black uppercase mb-1 text-rose-400">Fixed Bet Option (0=Var)</label>
-                    <input type="number" value={fixedStake} onChange={e => setFixedStake(Number(e.target.value))} placeholder="Amount" className="w-full bg-slate-800 border border-rose-500/30 rounded-lg p-2.5 text-rose-400 font-black text-sm focus:ring-1 focus:ring-rose-500" />
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Identity Section */}
+                <div className="space-y-4">
+                    <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest border-b border-slate-800 pb-2">Identity Details</h4>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Username / Login ID</label>
+                        <input type="text" value={id} onChange={e => setId(e.target.value)} required disabled={!!user} placeholder="Dealer01" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500 disabled:opacity-50" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Full Display Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Guru" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Phone Number</label>
+                        <input type="text" value={contact} onChange={e => setContact(e.target.value)} placeholder="e.g. 03" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">City / Area</label>
+                        <input type="text" value={area} onChange={e => setArea(e.target.value)} placeholder="e.g. Karachi" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
                 </div>
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Place (City/Area)</label><input type="text" value={area} onChange={e => setArea(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-                <div><label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Contact Number</label><input type="text" value={contact} onChange={e => setContact(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-1 focus:ring-emerald-500" /></div>
-            </div>
-            <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase mb-3 tracking-widest">Risk Management Limits</h4>
-                <div className="grid grid-cols-3 gap-2">
-                    <div><label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">1-Digit</label><input type="number" value={betLimits.oneDigit} onChange={e => setBetLimits({...betLimits, oneDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" /></div>
-                    <div><label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">2-Digit</label><input type="number" value={betLimits.twoDigit} onChange={e => setBetLimits({...betLimits, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" /></div>
-                    <div><label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Total</label><input type="number" value={betLimits.perDraw} onChange={e => setBetLimits({...betLimits, perDraw: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" /></div>
+
+                {/* Security & Finance Section */}
+                <div className="space-y-4">
+                    <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest border-b border-slate-800 pb-2">Security & Finance</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Password</label>
+                            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Confirm Password</label>
+                            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Wallet Balance (PKR)</label>
+                        <input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} placeholder="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">User Commission Rate (%)</label>
+                        <input type="number" step="0.1" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} placeholder="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1 text-rose-400">Fixed Bet Option (0=Variable)</label>
+                        <input type="number" value={fixedStake} onChange={e => setFixedStake(Number(e.target.value))} placeholder="Amount" className="w-full bg-slate-800 border border-rose-500/30 rounded-lg p-3 text-rose-400 font-black text-sm focus:ring-1 focus:ring-rose-500" />
+                    </div>
                 </div>
             </div>
-            <div className="flex gap-3 pt-4">
-                <button type="button" onClick={onCancel} className="flex-1 py-4 bg-slate-800 text-slate-300 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">Cancel</button>
-                <button type="submit" disabled={loading} className="flex-2 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">{loading ? 'SYNCING...' : 'COMMIT'}</button>
+
+            {/* Prize & Limits Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <div className="space-y-3">
+                    <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-1">Prize Settings</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Rate (2 Digit)</label>
+                            <input type="number" step="0.01" value={prizeRates.twoDigit} onChange={e => setPrizeRates({...prizeRates, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Rate (Open)</label>
+                            <input type="number" step="0.01" value={prizeRates.oneDigitOpen} onChange={e => setPrizeRates({...prizeRates, oneDigitOpen: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Rate (Close)</label>
+                            <input type="number" step="0.01" value={prizeRates.oneDigitClose} onChange={e => setPrizeRates({...prizeRates, oneDigitClose: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-1">Bet Limits</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Limit (2D)</label>
+                            <input type="number" value={betLimits.twoDigit} onChange={e => setBetLimits({...betLimits, twoDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Limit (1D)</label>
+                            <input type="number" value={betLimits.oneDigit} onChange={e => setBetLimits({...betLimits, oneDigit: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                        <div>
+                            <label className="block text-[9px] text-slate-600 font-bold uppercase mb-1">Per Draw</label>
+                            <input type="number" value={betLimits.perDraw} onChange={e => setBetLimits({...betLimits, perDraw: Number(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {error && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold rounded-lg text-center animate-shake">{error}</div>}
+
+            <div className="flex gap-4 pt-2">
+                <button type="button" onClick={onCancel} className="flex-1 py-4 bg-slate-800 text-slate-300 rounded-xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all">Cancel</button>
+                <button type="submit" disabled={loading} className="flex-2 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">
+                    {loading ? 'CREATING...' : (user ? 'UPDATE USER' : 'CREATE USER')}
+                </button>
             </div>
         </form>
     );
