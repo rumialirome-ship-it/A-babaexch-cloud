@@ -11,9 +11,10 @@ fi
 API_KEY="AIzaSyDsOLS0D5CRf5hpP-qIKdm4_xvE5fgIVI8"
 JWT_SECRET="ababa-secure-cloud-9988-secret"
 
-# Safety Check: Ensure Dockerfile is named correctly
-if [ -f "Dockerfile.js" ]; then
-    mv Dockerfile.js Dockerfile
+# Safety Check: Ensure Dockerfile exists
+if [ ! -f "Dockerfile" ]; then
+    echo "❌ Error: Dockerfile not found!"
+    exit 1
 fi
 
 echo "⚙️ Configuring gcloud for $PROJECT_ID..."

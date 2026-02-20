@@ -4,6 +4,5 @@ backend/node_modules
 .git
 .gitignore
 .env
-Dockerfile
 deploy.sh
 README.md
