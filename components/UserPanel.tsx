@@ -748,8 +748,44 @@ const BettingModal: React.FC<BettingModalProps> = ({ game, games, user, onClose,
                             </div>
                             <div className="bg-slate-800 rounded-xl border border-slate-700 divide-y divide-slate-700 overflow-hidden mb-6 shadow-inner">
                                 <div className="p-4 flex justify-between items-center"><span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Category</span><span className="text-sky-400 font-black">{subGameType}</span></div>
-                                <div className="p-4 text-left"><span className="text-xs text-slate-500 font-bold uppercase tracking-wider block mb-2">Number(s)</span><div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-2 no-scrollbar">{(subGameType === SubGameType.Bulk ? [] : subGameType === SubGameType.Combo ? generatedCombos.filter(c => c.selected).map(c => c.number) : parsedManualBet.numbers).map((num, i) => (<span key={i} className="px-2 py-1 bg-slate-900 border border-slate-700 rounded font-mono text-cyan-300 text-sm">{num}</span>))}{subGameType === SubGameType.Bulk && <span className="text-white italic text-xs">Bulk Entries Loaded.</span>}</div></div>
-                                <div className="p-4 grid grid-cols-2 bg-slate-900/50"><div className="text-left"><span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block">Count</span><span className="text-xl font-black text-white">{totalSelectedNumbers}</span></div><div className="text-right"><span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest block">Total Payable</span><span className="text-2xl font-black text-emerald-400 font-mono">Rs {finalBetTotalCost.toLocaleString()}</span></div></div>
+                                <div className="p-4 text-left">
+                                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block mb-2">Bet Details</span>
+                                    <div className="max-h-40 overflow-y-auto pr-2 no-scrollbar space-y-2">
+                                        {subGameType === SubGameType.Bulk ? (
+                                            Array.from(parsedBulkBet.betsByGame.entries()).map(([gameId, gameData]: any) => (
+                                                <div key={gameId} className="bg-slate-900 p-3 rounded border border-slate-700">
+                                                    <div className="text-sm font-bold text-white mb-2 pb-1 border-b border-slate-700">{gameData.gameName}</div>
+                                                    {Array.from(gameData.betGroups.values()).map((group: any, idx) => (
+                                                        <div key={idx} className="flex justify-between text-xs text-slate-300 mb-1">
+                                                            <span className="truncate max-w-[60%] font-mono text-cyan-300">{group.numbers.join(', ')}</span>
+                                                            <span className="font-mono">{group.numbers.length} x {group.amountPerNumber} = <span className="text-emerald-400">{group.numbers.length * group.amountPerNumber}</span></span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ))
+                                        ) : subGameType === SubGameType.Combo ? (
+                                            generatedCombos.filter(c => c.selected).map((c, idx) => (
+                                                <div key={idx} className="flex justify-between items-center text-sm text-slate-300 bg-slate-900 p-2 rounded border border-slate-700">
+                                                    <span className="font-mono text-cyan-300">{c.number}</span>
+                                                    <span>Amount: <span className="text-emerald-400 font-mono">{c.stake}</span></span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="bg-slate-900 p-3 rounded border border-slate-700">
+                                                <div className="flex flex-wrap gap-1.5 mb-3">
+                                                    {parsedManualBet.numbers.map((num, i) => (
+                                                        <span key={i} className="px-2 py-1 bg-slate-800 border border-slate-600 rounded font-mono text-cyan-300 text-sm">{num}</span>
+                                                    ))}
+                                                </div>
+                                                <div className="flex justify-between text-sm text-slate-300 border-t border-slate-700 pt-2">
+                                                    <span>Amount per number:</span>
+                                                    <span className="text-emerald-400 font-mono">{parsedManualBet.stake}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="p-4 grid grid-cols-2 bg-slate-900/50"><div className="text-left"><span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block">Total Bets</span><span className="text-xl font-black text-white">{totalSelectedNumbers}</span></div><div className="text-right"><span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest block">Total Payable</span><span className="text-2xl font-black text-emerald-400 font-mono">Rs {finalBetTotalCost.toLocaleString()}</span></div></div>
                             </div>
                             <div className="flex gap-3">
                                 <button onClick={() => setIsConfirming(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg border border-slate-700 transition-all uppercase tracking-widest text-xs active:translate-y-0.5">Back</button>
