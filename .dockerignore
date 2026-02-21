@@ -6,3 +6,5 @@ backend/node_modules
 .env
 deploy.sh
 README.md
+*.sqlite
+*.sqlite-journal
