@@ -1,39 +1,28 @@
 # STEP 1: Build the React Frontend
-FROM node:20-bookworm AS builder
+FROM node:20 AS builder
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Remove lockfile to avoid platform-specific issues
-RUN rm -f package-lock.json
+# Clean install to avoid lockfile issues
+RUN rm -f package-lock.json && npm install
 
-# Install build dependencies
-RUN npm install
-
-# Copy source and build the static dist folder
+# Copy source and build
 COPY . .
-RUN npm run build
+# We use --emptyOutDir to ensure a clean build
+RUN npx vite build
 
 # STEP 2: Setup the Runtime Environment
-FROM node:20-bookworm-slim
+FROM node:20
 WORKDIR /app
 
-# Install runtime dependencies for better-sqlite3
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# Install build tools in the runtime stage as well for better-sqlite3
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# Copy backend configuration and install production dependencies
+# Copy backend configuration
 COPY backend/package*.json ./backend/
-
-# Remove lockfile
-RUN rm -f backend/package-lock.json
-
-# Install production dependencies
-RUN cd backend && npm install --omit=dev
+RUN cd backend && rm -f package-lock.json && npm install --omit=dev
 
 # Copy the compiled frontend from the builder stage
 COPY --from=builder /app/dist ./dist

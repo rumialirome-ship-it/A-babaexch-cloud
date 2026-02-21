@@ -14,8 +14,12 @@ JWT_SECRET="ababa-secure-cloud-9988-secret"
 # Safety Check: Ensure Dockerfile exists
 if [ ! -f "Dockerfile" ]; then
     echo "❌ Error: Dockerfile not found!"
+    ls -la
     exit 1
 fi
+
+echo "📄 Dockerfile found. Content preview:"
+head -n 5 Dockerfile
 
 echo "⚙️ Configuring gcloud for $PROJECT_ID..."
 gcloud config set run/region $REGION --quiet
