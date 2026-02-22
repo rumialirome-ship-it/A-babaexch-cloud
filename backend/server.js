@@ -56,6 +56,32 @@ app.get('/api/auth/verify', authMiddleware, (req, res) => {
     res.json({ account, role, ...extra });
 });
 
+app.get('/api/ledger/:accountId', authMiddleware, (req, res) => {
+    const { accountId } = req.params;
+    const { role } = req.user;
+    
+    // Authorization logic
+    if (role === 'ADMIN') {
+        // Admin can see everything
+    } else if (role === 'DEALER') {
+        // Dealer can only see their own ledger or their users' ledgers
+        if (accountId !== req.user.id) {
+            const user = database.findAccountById(accountId, 'users');
+            if (!user || user.dealerId.toLowerCase() !== req.user.id.toLowerCase()) {
+                return res.status(403).json({ message: 'Access Denied' });
+            }
+        }
+    } else if (role === 'USER') {
+        // User can only see their own ledger
+        if (accountId !== req.user.id) {
+            return res.status(403).json({ message: 'Access Denied' });
+        }
+    }
+
+    const ledger = database.getLedgerForAccount(accountId, 500); // Fetch more entries for detailed view
+    res.json(ledger);
+});
+
 app.get('/api/admin/summary', authMiddleware, (req, res) => res.json(database.getFinancialSummary()));
 app.get('/api/admin/detailed-winners', authMiddleware, (req, res) => res.json(database.getDetailedWinners()));
 app.get('/api/admin/live-stats', authMiddleware, (req, res) => res.json(database.getLiveStats()));

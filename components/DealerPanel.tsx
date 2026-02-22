@@ -59,38 +59,7 @@ const RevenueDashboard: React.FC<{ dealer: Dealer; bets: Bet[] }> = ({ dealer, b
     );
 };
 
-const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
-    const sortedEntries = useMemo(() => [...(entries || [])].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()), [entries]);
-    return (
-        <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
-            <div className="overflow-x-auto no-scrollbar">
-                <table className="w-full text-left min-w-[700px]">
-                    <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10 border-b border-slate-700">
-                        <tr>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Narrative</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Debit (-)</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Credit (+)</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Portfolio Balance</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                        {sortedEntries.map(entry => (
-                            <tr key={entry.id} className="hover:bg-emerald-500/5 transition-all group">
-                                <td className="p-4 whitespace-nowrap text-[11px] font-mono text-slate-400">{new Date(entry.timestamp).toLocaleString()}</td>
-                                <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
-                                <td className="p-4 text-right text-rose-400 font-mono text-xs">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
-                                <td className="p-4 text-right text-emerald-400 font-mono text-xs">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
-                                <td className="p-4 text-right font-black text-white font-mono text-xs">Rs {entry.balance.toFixed(2)}</td>
-                            </tr>
-                        ))}
-                        {(!entries || entries.length === 0) && (<tr><td colSpan={5} className="p-12 text-center text-slate-500 font-black uppercase text-[10px] tracking-widest">No transaction logs available</td></tr>)}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-};
+import { LedgerTable } from './LedgerTable';
 
 interface DealerPanelProps {
   dealer: Dealer;
@@ -112,9 +81,23 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
-  const [viewingUserLedgerFor, setViewingUserLedgerFor] = useState<User | null>(null);
+  const [viewingAccountLedger, setViewingAccountLedger] = useState<{ id: string, name: string, ledger: LedgerEntry[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const { fetchWithAuth } = useAuth();
+
+  const fetchLedger = async (id: string, name: string) => {
+    try {
+        const res = await fetchWithAuth(`/api/ledger/${id}`);
+        if (res.ok) {
+            const ledger = await res.json();
+            setViewingAccountLedger({ id, name, ledger });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+  };
 
   const showToast = (msg: string, type: 'success' | 'error') => setToast({ msg, type });
 
@@ -192,7 +175,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                                 <td className="p-4 text-right"><div className="font-mono text-emerald-400 font-black text-sm">Rs {user.wallet.toLocaleString(undefined, {minimumFractionDigits: 2})}</div></td>
                                 <td className="p-4 text-center"><div className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-black inline-block">{user.commissionRate}%</div></td>
                                 <td className="p-4 text-center"><button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest transition-all ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button></td>
-                                <td className="p-4 text-right"><div className="flex justify-end gap-3"><button onClick={() => setViewingUserLedgerFor(user)} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline active:opacity-50">Ledger</button><button onClick={() => { setSelectedUser(user); setIsUserModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white active:scale-90 transition-transform">Edit</button></div></td>
+                                <td className="p-4 text-right"><div className="flex justify-end gap-3"><button onClick={() => fetchLedger(user.id, user.name)} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline active:opacity-50">Ledger</button><button onClick={() => { setSelectedUser(user); setIsUserModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white active:scale-90 transition-transform">Edit</button></div></td>
                             </tr>
                         ))}
                     </tbody>
@@ -211,7 +194,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
                             <button onClick={() => toggleAccountRestriction(user.id, 'user')} className={`px-2 py-0.5 rounded border ${user.isRestricted ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>{user.isRestricted ? 'LOCKED' : 'ACTIVE'}</button>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setViewingUserLedgerFor(user)} className="flex-1 bg-slate-900 border border-slate-700 py-3 rounded-lg text-[10px] font-black text-cyan-400 uppercase active:scale-95 transition-all">Audit Ledger</button>
+                            <button onClick={() => fetchLedger(user.id, user.name)} className="flex-1 bg-slate-900 border border-slate-700 py-3 rounded-lg text-[10px] font-black text-cyan-400 uppercase active:scale-95 transition-all">Audit Ledger</button>
                             <button onClick={() => { setSelectedUser(user); setIsUserModalOpen(true); }} className="flex-1 bg-slate-900 border border-slate-700 py-3 rounded-lg text-[10px] font-black text-slate-400 uppercase active:scale-95 transition-all">Modify</button>
                         </div>
                     </div>
@@ -288,7 +271,7 @@ const DealerPanel: React.FC<DealerPanelProps> = ({ dealer, users, onSaveUser, on
           <UserTransactionForm type="Withdrawal" users={dealerUsers} onTransaction={async (userId, amount) => { await withdrawFromUserWallet(userId, amount); showToast("Withdrawal Successful", "success"); setIsWithdrawalModalOpen(false); }} onCancel={() => setIsWithdrawalModalOpen(false)} />
       </Modal>
 
-      {viewingUserLedgerFor && <Modal isOpen={!!viewingUserLedgerFor} onClose={() => setViewingUserLedgerFor(null)} title={`History: ${viewingUserLedgerFor.name}`} size="xl" themeColor="cyan"><LedgerTable entries={viewingUserLedgerFor.ledger} /></Modal>}
+      {viewingAccountLedger && <Modal isOpen={!!viewingAccountLedger} onClose={() => setViewingAccountLedger(null)} title={`History: ${viewingAccountLedger.name}`} size="xl" themeColor="cyan"><LedgerTable entries={viewingAccountLedger.ledger} /></Modal>}
     </div>
   );
 };
@@ -365,7 +348,7 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
                         </div>
                     </div>
                     <div>
-                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Wallet Balance (PKR)</label>
+                        <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Wallet Balance (Rs)</label>
                         <input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} placeholder="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
                     </div>
                     <div>

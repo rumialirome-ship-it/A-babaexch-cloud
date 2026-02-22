@@ -45,6 +45,8 @@ interface NumberSummaryData {
     oneDigitClose: { number: string, total: number }[];
 }
 
+import { LedgerTable } from './LedgerTable';
+
 interface AdminPanelProps {
   admin: Admin;
   dealers: Dealer[];
@@ -90,58 +92,17 @@ const MarketCountdown: React.FC<{ drawTime: string }> = ({ drawTime }) => {
     );
 };
 
-const LedgerTable: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
-    // Ensure entries are sorted oldest first (Forward sequence)
-    const sortedEntries = useMemo(() => {
-        if (!entries) return [];
-        return [...entries].sort((a, b) => {
-            const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-            const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-            return timeA - timeB;
-        });
-    }, [entries]);
-
-    return (
-        <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700 shadow-inner">
-            <div className="overflow-y-auto max-h-[60vh] mobile-scroll-x no-scrollbar">
-                <table className="w-full text-left min-w-[600px]">
-                    <thead className="bg-slate-800/50 sticky top-0 backdrop-blur-sm z-10">
-                        <tr className="border-b border-slate-700">
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date/Time</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Description</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Debit (-)</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Credit (+)</th>
-                            <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Portfolio Balance</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                        {sortedEntries.map(entry => (
-                            <tr key={entry.id} className="hover:bg-cyan-500/5 transition-colors">
-                                <td className="p-4 text-[10px] font-mono text-slate-400 whitespace-nowrap">{new Date(entry.timestamp).toLocaleString()}</td>
-                                <td className="p-4 text-xs text-white font-medium">{entry.description}</td>
-                                <td className="p-4 text-right text-rose-400 font-mono text-xs">{entry.debit > 0 ? `-${entry.debit.toFixed(2)}` : '-'}</td>
-                                <td className="p-4 text-right text-emerald-400 font-mono text-xs">{entry.credit > 0 ? `+${entry.credit.toFixed(2)}` : '-'}</td>
-                                <td className="p-4 text-right font-black text-white font-mono text-xs">Rs {entry.balance.toFixed(2)}</td>
-                            </tr>
-                        ))}
-                        {sortedEntries.length === 0 && (
-                            <tr><td colSpan={5} className="p-12 text-center text-slate-600 font-black uppercase text-[10px] tracking-widest">No history found</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-};
-
 const LedgersView: React.FC<{ 
     admin: Admin; 
     dealers: Dealer[]; 
+    users: User[];
+    fetchWithAuth: any;
     topUpDealerWallet?: (id: string, amt: number) => Promise<void>; 
     withdrawFromDealerWallet?: (id: string, amt: number) => Promise<void>; 
     onRefresh: () => void;
-}> = ({ admin, dealers, topUpDealerWallet, withdrawFromDealerWallet, onRefresh }) => {
+}> = ({ admin, dealers, users, fetchWithAuth, topUpDealerWallet, withdrawFromDealerWallet, onRefresh }) => {
     const [viewingAdminLedger, setViewingAdminLedger] = useState(false);
+    const [viewingAccountLedger, setViewingAccountLedger] = useState<{ id: string, name: string, ledger: LedgerEntry[] } | null>(null);
     const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
     const [amount, setAmount] = useState<string>('');
     const [loading, setLoading] = useState(false);
@@ -159,6 +120,18 @@ const LedgersView: React.FC<{
             alert("Transaction failed");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchLedger = async (id: string, name: string) => {
+        try {
+            const res = await fetchWithAuth(`/api/ledger/${id}`);
+            if (res.ok) {
+                const ledger = await res.json();
+                setViewingAccountLedger({ id, name, ledger });
+            }
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -218,8 +191,9 @@ const LedgersView: React.FC<{
                                     <div className="text-xs font-black text-white uppercase">{d.name}</div>
                                     <div className="text-[9px] text-slate-500 font-mono uppercase">{d.id}</div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right flex items-center gap-4">
                                     <div className="text-xs font-black text-emerald-400 font-mono">Rs {d.wallet.toLocaleString()}</div>
+                                    <button onClick={() => fetchLedger(d.id, d.name)} className="p-2 text-cyan-400 hover:text-white transition-colors">{Icons.bookOpen}</button>
                                 </div>
                             </div>
                         ))}
@@ -229,6 +203,10 @@ const LedgersView: React.FC<{
 
             <Modal isOpen={viewingAdminLedger} onClose={() => setViewingAdminLedger(false)} title="System Master Ledger (Admin)" size="xl" themeColor="red">
                 <LedgerTable entries={admin.ledger} />
+            </Modal>
+
+            <Modal isOpen={!!viewingAccountLedger} onClose={() => setViewingAccountLedger(null)} title={`Ledger: ${viewingAccountLedger?.name}`} size="xl" themeColor="indigo">
+                <LedgerTable entries={viewingAccountLedger?.ledger || []} />
             </Modal>
         </div>
     );
@@ -787,14 +765,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
   const [editingWinnerMap, setEditingWinnerMap] = useState<Record<string, boolean>>({});
   const [pendingDeclareMap, setPendingDeclareMap] = useState<Record<string, boolean>>({});
-  const [viewingUserLedgerFor, setViewingUserLedgerFor] = useState<User | null>(null);
-  const [viewingDealerLedgerFor, setViewingDealerLedgerFor] = useState<Dealer | null>(null);
+  const [viewingAccountLedger, setViewingAccountLedger] = useState<{ id: string, name: string, ledger: LedgerEntry[] } | null>(null);
   const [isDealerModalOpen, setIsDealerModalOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | undefined>(undefined);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [tempTime, setTempTime] = useState<string>('');
 
   const { fetchWithAuth } = useAuth();
+
+  const fetchLedger = async (id: string, name: string) => {
+    try {
+        const res = await fetchWithAuth(`/api/ledger/${id}`);
+        if (res.ok) {
+            const ledger = await res.json();
+            setViewingAccountLedger({ id, name, ledger });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+  };
 
   const handleDeclareAction = async (gameId: string, val: string, isUpdate: boolean) => {
     if (!val) return;
@@ -913,7 +902,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                   </td>
                                   <td className="p-4 text-xs font-mono text-emerald-400 font-black">Rs {u.wallet.toLocaleString()}</td>
                                   <td className="p-4 text-right">
-                                      <button onClick={() => setViewingUserLedgerFor(u)} className="text-[10px] font-black text-cyan-400 hover:text-white uppercase tracking-widest transition-all mr-6">Open Ledger</button>
+                                      <button onClick={() => fetchLedger(u.id, u.name)} className="text-[10px] font-black text-cyan-400 hover:text-white uppercase tracking-widest transition-all mr-6">Open Ledger</button>
                                       <button onClick={() => toggleAccountRestriction?.(u.id, 'user')} className={`text-[10px] font-black uppercase tracking-widest transition-all ${u.isRestricted ? 'text-red-500' : 'text-emerald-500'}`}>
                                           {u.isRestricted ? 'Unlock' : 'Lock'}
                                       </button>
@@ -957,7 +946,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                       <td className="p-4 text-xs font-mono text-emerald-400 font-black">Rs {d.wallet.toLocaleString()}</td>
                                       <td className="p-4 text-right">
                                           <div className="flex justify-end gap-3 items-center">
-                                              <button onClick={() => setViewingDealerLedgerFor(d)} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline">Audit Ledger</button>
+                                              <button onClick={() => fetchLedger(d.id, d.name)} className="text-[10px] font-black text-cyan-400 uppercase tracking-widest hover:underline">Audit Ledger</button>
                                               <button onClick={() => { setSelectedDealer(d); setIsDealerModalOpen(true); }} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-white">Edit</button>
                                               <button onClick={() => toggleAccountRestriction?.(d.id, 'dealer')} className={`text-[10px] font-black uppercase tracking-widest transition-all ${d.isRestricted ? 'text-red-500' : 'text-emerald-500'}`}>
                                                   {d.isRestricted ? 'Unlock' : 'Lock'}
@@ -1067,15 +1056,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {viewingUserLedgerFor && (
-          <Modal isOpen={!!viewingUserLedgerFor} onClose={() => setViewingUserLedgerFor(null)} title={`Ledger Audit: ${viewingUserLedgerFor.name}`} size="xl" themeColor="cyan">
-              <LedgerTable entries={viewingUserLedgerFor.ledger} />
-          </Modal>
-      )}
-
-      {viewingDealerLedgerFor && (
-          <Modal isOpen={!!viewingDealerLedgerFor} onClose={() => setViewingDealerLedgerFor(null)} title={`Dealer Audit: ${viewingDealerLedgerFor.name}`} size="xl" themeColor="emerald">
-              <LedgerTable entries={viewingDealerLedgerFor.ledger} />
+      {viewingAccountLedger && (
+          <Modal isOpen={!!viewingAccountLedger} onClose={() => setViewingAccountLedger(null)} title={`Ledger Audit: ${viewingAccountLedger.name}`} size="xl" themeColor="cyan">
+              <LedgerTable entries={viewingAccountLedger.ledger} />
           </Modal>
       )}
 

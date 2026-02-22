@@ -194,6 +194,9 @@ module.exports = {
         });
     },
     findUsersByDealerId: (dealerId) => db.prepare('SELECT * FROM users WHERE dealerId = ?').all(dealerId).map(u => normalizeAccount(u, 'users')),
+    getLedgerForAccount: (accountId, limit = 100) => {
+        return db.prepare('SELECT * FROM ledgers WHERE accountId = ? ORDER BY timestamp DESC, rowid DESC LIMIT ?').all(accountId, limit).map(l => ({...l, timestamp: new Date(l.timestamp)}));
+    },
     findBetsByDealerId: (dealerId) => db.prepare('SELECT * FROM bets WHERE dealerId = ? ORDER BY timestamp DESC').all(dealerId).map(b => ({...b, numbers: safeJsonParse(b.numbers), timestamp: new Date(b.timestamp)})),
     findBetsByUserId: (userId) => db.prepare('SELECT * FROM bets WHERE userId = ? ORDER BY timestamp DESC').all(userId).map(b => ({...b, numbers: safeJsonParse(b.numbers), timestamp: new Date(b.timestamp)})),
     searchBets: (query, gameId, userId) => {
@@ -282,6 +285,8 @@ module.exports = {
             
             const limits = safeJsonParse(user.betLimits) || { oneDigit: 10000, twoDigit: 10000, perDraw: 50000 };
             
+            let currentUserWallet = user.wallet;
+            
             const processBet = (gameId, betGroups) => {
                 const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
                 if (!game) throw new Error(`Game ID ${gameId} not found`);
@@ -300,19 +305,19 @@ module.exports = {
                 
                 const currentTotal = db.prepare('SELECT SUM(totalAmount) as sum FROM bets WHERE userId = ? AND gameId = ?').get(user.id, game.id);
                 if (((currentTotal.sum || 0) + totalCost) > limits.perDraw) throw new Error(`Draw Limit Exceeded for ${game.name}`);
-                if (user.wallet < totalCost) throw new Error('Insufficient wallet balance');
+                if (currentUserWallet < totalCost) throw new Error('Insufficient wallet balance');
                 
-                const afterBet = user.wallet - totalCost; 
-                db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(afterBet, user.id);
+                currentUserWallet -= totalCost; 
+                db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(currentUserWallet, user.id);
                 
                 const ts = new Date().toISOString(); 
-                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', ts, `Play: ${game.name}`, totalCost, 0, afterBet);
+                db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', ts, `Play: ${game.name}`, totalCost, 0, currentUserWallet);
                 
                 const uc = totalCost * (user.commissionRate / 100); 
                 if (uc > 0) { 
-                    const ac = afterBet + uc; 
-                    db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(ac, user.id); 
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', new Date(new Date(ts).getTime()+1).toISOString(), `Comm: ${game.name}`, 0, uc, ac); 
+                    currentUserWallet += uc; 
+                    db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(currentUserWallet, user.id); 
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', new Date(new Date(ts).getTime()+1).toISOString(), `Comm: ${game.name}`, 0, uc, currentUserWallet); 
                 }
                 
                 const dc = totalCost * (dealer.commissionRate / 100); 

@@ -9,6 +9,7 @@
     "build": "vite build",
     "gcp-build": "vite build",
     "preview": "vite preview",
+    "lint": "tsc --noEmit",
     "start": "node backend/server.js"
   },
   "dependencies": {

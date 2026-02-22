@@ -216,8 +216,8 @@ const GameStakeBreakdown: React.FC<{ games: Game[], bets: Bet[], user: User }> =
 };
 
 const LedgerView: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
-    const [startDate, setStartDate] = useState(getTodayDateString());
-    const [endDate, setEndDate] = useState(getTodayDateString());
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     const filteredEntries = useMemo(() => {
         if (!startDate && !endDate) return entries;
@@ -269,7 +269,7 @@ const LedgerView: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {[...filteredEntries].reverse().map(entry => (
+                            {[...filteredEntries].map(entry => (
                                 <tr key={entry.id} className="hover:bg-sky-500/10 transition-colors">
                                     <td className="p-4 text-sm text-slate-400 whitespace-nowrap">{entry.timestamp.toLocaleString()}</td>
                                     <td className="p-4 text-white">{entry.description}</td>
@@ -294,8 +294,8 @@ const LedgerView: React.FC<{ entries: LedgerEntry[] }> = ({ entries }) => {
 };
 
 const BetHistoryView: React.FC<{ bets: Bet[], games: Game[], user: User }> = ({ bets, games, user }) => {
-    const [startDate, setStartDate] = useState(getTodayDateString());
-    const [endDate, setEndDate] = useState(getTodayDateString());
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
     const getBetOutcome = (bet: Bet) => {
@@ -366,8 +366,8 @@ const BetHistoryView: React.FC<{ bets: Bet[], games: Game[], user: User }> = ({ 
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Game</th>
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Bet Details</th>
-                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Stake (PKR)</th>
-                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Payout (PKR)</th>
+                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Stake (Rs)</th>
+                                <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Payout (Rs)</th>
                                 <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Status</th>
                             </tr>
                         </thead>
@@ -855,7 +855,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, games, bets, placeBet }) =>
                 </div>
                 <div className="bg-slate-800/50 px-6 py-3 rounded-xl border border-slate-700 shadow-lg flex flex-col items-end">
                     <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Available Wallet</p>
-                    <p className="text-2xl font-black text-cyan-400 font-mono">PKR {user.wallet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <p className="text-2xl font-black text-cyan-400 font-mono">Rs {user.wallet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                 </div>
             </div>
 
