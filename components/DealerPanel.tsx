@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Dealer, User, PrizeRates, LedgerEntry, Bet, Game, SubGameType, BetLimits } from '../types';
 import { Icons } from '../constants';
+import { useAuth } from '../hooks/useAuth';
 
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; size?: 'md' | 'lg' | 'xl'; themeColor?: string }> = ({ isOpen, onClose, title, children, size = 'md', themeColor = 'emerald' }) => {
     if (!isOpen) return null;
