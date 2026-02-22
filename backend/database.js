@@ -42,7 +42,7 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS dealers (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, password TEXT, area TEXT, contact TEXT, wallet REAL, commissionRate REAL, isRestricted INTEGER DEFAULT 0, prizeRates TEXT, avatarUrl TEXT);
             CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, password TEXT, dealerId TEXT COLLATE NOCASE, area TEXT, contact TEXT, wallet REAL, commissionRate REAL, isRestricted INTEGER DEFAULT 0, prizeRates TEXT, betLimits TEXT, fixedStake REAL DEFAULT 0, avatarUrl TEXT, FOREIGN KEY (dealerId) REFERENCES dealers(id));
             CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, drawTime TEXT, winningNumber TEXT, payoutsApproved INTEGER DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS bets (id TEXT PRIMARY KEY COLLATE NOCASE, userId TEXT COLLATE NOCASE, dealerId TEXT COLLATE NOCASE, gameId TEXT COLLATE NOCASE, subGameType TEXT, numbers TEXT, amountPerNumber REAL, totalAmount REAL, timestamp TEXT, userCommissionRate REAL, dealerCommissionRate REAL, FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (dealerId) REFERENCES dealers(id), FOREIGN KEY (gameId) REFERENCES games(id));
+            CREATE TABLE IF NOT EXISTS bets (id TEXT PRIMARY KEY COLLATE NOCASE, userId TEXT COLLATE NOCASE, dealerId TEXT COLLATE NOCASE, gameId TEXT COLLATE NOCASE, subGameType TEXT, numbers TEXT, amountPerNumber REAL, totalAmount REAL, timestamp TEXT, userCommissionRate REAL, dealerCommissionRate REAL, prizeRates TEXT, FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (dealerId) REFERENCES dealers(id), FOREIGN KEY (gameId) REFERENCES games(id));
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY COLLATE NOCASE, accountId TEXT COLLATE NOCASE, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
             CREATE TABLE IF NOT EXISTS daily_resets (reset_date TEXT PRIMARY KEY);
         `);
@@ -56,6 +56,9 @@ const connect = () => {
         if (!betTableInfo.find(c => c.name === 'userCommissionRate')) {
             db.exec("ALTER TABLE bets ADD COLUMN userCommissionRate REAL");
             db.exec("ALTER TABLE bets ADD COLUMN dealerCommissionRate REAL");
+        }
+        if (!betTableInfo.find(c => c.name === 'prizeRates')) {
+            db.exec("ALTER TABLE bets ADD COLUMN prizeRates TEXT");
         }
 
         const checkCount = db.prepare("SELECT count(*) as count FROM admins").get();
@@ -323,41 +326,39 @@ module.exports = {
                 const dealerCommAmount = totalCost * (dealer.commissionRate / 100);
                 const userCommAmount = totalCost * (user.commissionRate / 100);
 
-                // Admin receives the full stake and pays the full dealer commission rate
+                // Admin receives the full stake and pays the full dealer commission rate to the Dealer
                 if (admin) {
                     let adminWallet = admin.wallet + totalCost;
                     db.prepare('UPDATE admins SET wallet = ? WHERE id = ?').run(adminWallet, admin.id);
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Stake: ${game.name} from ${user.name}`, 0, totalCost, adminWallet);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Stake: ${game.name} from ${user.name} (via ${dealer.name})`, 0, totalCost, adminWallet);
                     
                     if (dealerCommAmount > 0) {
                         adminWallet -= dealerCommAmount;
                         db.prepare('UPDATE admins SET wallet = ? WHERE id = ?').run(adminWallet, admin.id);
-                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', new Date(new Date(ts).getTime()+1).toISOString(), `Comm Payout: ${user.name} via ${dealer.name}`, dealerCommAmount, 0, adminWallet);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', new Date(new Date(ts).getTime()+1).toISOString(), `Dealer Comm Payout: ${dealer.name} for ${user.name}`, dealerCommAmount, 0, adminWallet);
+                        
+                        // Credit Dealer with full commission
+                        const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(dealer.id);
+                        const dw = currentDealer.wallet + dealerCommAmount;
+                        db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(dw, dealer.id);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), dealer.id, 'DEALER', ts, `Comm Received: ${user.name} Play`, 0, dealerCommAmount, dw);
                     }
                 }
 
-                // User gets their commission
+                // Dealer pays User their commission (handled internally by Dealer)
                 if (userCommAmount > 0) {
+                    const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(dealer.id);
+                    const dw = currentDealer.wallet - userCommAmount;
+                    db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(dw, dealer.id);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), dealer.id, 'DEALER', new Date(new Date(ts).getTime()+2).toISOString(), `User Comm Paid: ${user.name}`, userCommAmount, 0, dw);
+
                     currentUserWallet += userCommAmount;
                     db.prepare('UPDATE users SET wallet = ? WHERE id = ?').run(currentUserWallet, user.id);
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', new Date(new Date(ts).getTime()+2).toISOString(), `Comm: ${game.name}`, 0, userCommAmount, currentUserWallet);
-                }
-
-                // Dealer gets the difference (Dealer Rate - User Rate)
-                const netDealerComm = dealerCommAmount - userCommAmount;
-                if (netDealerComm !== 0) {
-                    const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(dealer.id);
-                    const dw = currentDealer.wallet + netDealerComm;
-                    db.prepare('UPDATE dealers SET wallet = ? WHERE id = ?').run(dw, dealer.id);
-                    
-                    const desc = netDealerComm > 0 ? `Network Comm: ${user.name}` : `Comm Shortfall: ${user.name}`;
-                    const debit = netDealerComm < 0 ? Math.abs(netDealerComm) : 0;
-                    const credit = netDealerComm > 0 ? netDealerComm : 0;
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), dealer.id, 'DEALER', ts, desc, debit, credit, dw);
+                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), user.id, 'USER', new Date(new Date(ts).getTime()+3).toISOString(), `Comm: ${game.name}`, 0, userCommAmount, currentUserWallet);
                 }
                 
                 betGroups.forEach(bg => {
-                    db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp, userCommissionRate, dealerCommissionRate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO bets (id, userId, dealerId, gameId, subGameType, numbers, amountPerNumber, totalAmount, timestamp, userCommissionRate, dealerCommissionRate, prizeRates) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         uuidv4(), 
                         user.id, 
                         dealer.id, 
@@ -368,7 +369,8 @@ module.exports = {
                         bg.numbers.length * bg.amountPerNumber, 
                         ts,
                         user.commissionRate,
-                        dealer.commissionRate
+                        dealer.commissionRate,
+                        JSON.stringify(user.prizeRates)
                     );
                 });
             };
@@ -403,9 +405,9 @@ module.exports = {
                     payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
                 }
             });
-            return { gameId: g.id, gameName: g.name, winningNumber: g.winningNumber || '-', totalStake: stake, totalPayouts: payouts, userCommission: userComm, dealerCommission: dealerComm - userComm, netProfit: stake - payouts - dealerComm };
+            return { gameId: g.id, gameName: g.name, winningNumber: g.winningNumber || '-', totalStake: stake, totalPayouts: payouts, dealerCommission: dealerComm, netProfit: stake - payouts - dealerComm };
         });
-        return { games: summaries, totals: summaries.reduce((acc, s) => ({ totalStake: acc.totalStake + s.totalStake, totalPayouts: acc.totalPayouts + s.totalPayouts, totalUserCommission: acc.totalUserCommission + s.userCommission, totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, netProfit: acc.netProfit + s.netProfit }), { totalStake: 0, totalPayouts: 0, totalUserCommission: 0, totalDealerCommission: 0, netProfit: 0 }) };
+        return { games: summaries, totals: summaries.reduce((acc, s) => ({ totalStake: acc.totalStake + s.totalStake, totalPayouts: acc.totalPayouts + s.totalPayouts, totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, netProfit: acc.netProfit + s.netProfit }), { totalStake: 0, totalPayouts: 0, totalDealerCommission: 0, netProfit: 0 }) };
     },
     getDetailedWinners: () => {
         const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL').all();
@@ -443,18 +445,28 @@ module.exports = {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
             if (!game || !game.winningNumber || game.winningNumber.includes('_') || game.payoutsApproved) return { success: false };
             const admin = db.prepare('SELECT id, wallet FROM admins LIMIT 1').get();
-            db.prepare('SELECT b.*, u.prizeRates FROM bets b JOIN users u ON b.userId = u.id WHERE b.gameId = ?').all(gameId).forEach(bet => {
+            db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId).forEach(bet => {
                 const payout = calculatePayout(bet, game.winningNumber, game.name, bet.prizeRates);
                 if (payout > 0) {
-                    db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, bet.userId);
-                    const nw = db.prepare('SELECT wallet FROM users WHERE id = ?').get(bet.userId).wallet;
                     const ts = new Date().toISOString();
-                    db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId, 'USER', ts, `Draw Winner: ${game.name} (${game.winningNumber})`, 0, payout, nw);
                     
                     if (admin) {
+                        // 1. Deduct from Admin Wallet
                         db.prepare('UPDATE admins SET wallet = wallet - ? WHERE id = ?').run(payout, admin.id);
                         const aw = db.prepare('SELECT wallet FROM admins WHERE id = ?').get(admin.id).wallet;
-                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Payout: ${game.name} to ${bet.userId}`, payout, 0, aw);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Prize Payout: ${game.name} to ${bet.userId} (via ${bet.dealerId})`, payout, 0, aw);
+
+                        // 2. Hierarchical Ledger for Dealer (Wallet NOT touched as per "direct transfer" request)
+                        const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(bet.dealerId);
+                        if (currentDealer) {
+                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', ts, `Prize Received: ${game.name} from Admin`, 0, payout, currentDealer.wallet);
+                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', new Date(new Date(ts).getTime()+1).toISOString(), `Prize Paid: ${bet.userId} (Direct)`, payout, 0, currentDealer.wallet);
+                        }
+
+                        // 3. Credit User Wallet Directly
+                        db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, bet.userId);
+                        const uw = db.prepare('SELECT wallet FROM users WHERE id = ?').get(bet.userId).wallet;
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId, 'USER', new Date(new Date(ts).getTime()+2).toISOString(), `Draw Winner: ${game.name} (${game.winningNumber}) from Admin`, 0, payout, uw);
                     }
                 }
             });

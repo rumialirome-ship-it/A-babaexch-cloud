@@ -25,14 +25,12 @@ interface FinancialSummary {
     winningNumber: string;
     totalStake: number;
     totalPayouts: number;
-    userCommission: number;
     dealerCommission: number;
     netProfit: number;
   }[];
   totals: {
     totalStake: number;
     totalPayouts: number;
-    totalUserCommission: number;
     totalDealerCommission: number;
     netProfit: number;
   };
@@ -642,9 +640,9 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-2xl font-black text-white font-mono">Rs {summary.totals.totalStake.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1 text-sky-400">Total Commission</div>
-                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {(summary.totals.totalDealerCommission + summary.totals.totalUserCommission).toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Dealer + Player Payouts</div>
+                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1 text-sky-400">Total Dealer Commission</div>
+                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {summary.totals.totalDealerCommission.toLocaleString()}</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Agency network payouts</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div className="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Total Payouts</div>
@@ -653,7 +651,7 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                 <div className="bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20">
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Stake - Payouts - (Dlr Comm + Usr Comm)</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Stake - Payouts - Dealer Commission</div>
                 </div>
             </div>
 
@@ -664,7 +662,6 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                             <tr>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Market</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Stake</th>
-                                <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">User Comm.</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Dealer Comm.</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Payouts</th>
                                 <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Net Profit</th>
@@ -675,7 +672,6 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                                 <tr key={game.gameId} className="hover:bg-cyan-500/5 transition-all">
                                     <td className="p-4 font-black text-white uppercase text-xs">{game.gameName}</td>
                                     <td className="p-4 text-right font-mono text-white text-xs">Rs {game.totalStake.toLocaleString()}</td>
-                                    <td className="p-4 text-right font-mono text-sky-400 text-xs">{game.userCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-emerald-400 text-xs">{game.dealerCommission.toFixed(2)}</td>
                                     <td className="p-4 text-right font-mono text-rose-400 text-xs">{game.totalPayouts.toFixed(2)}</td>
                                     <td className={`p-4 text-right font-black font-mono text-sm ${game.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
