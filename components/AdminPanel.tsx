@@ -642,9 +642,9 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-2xl font-black text-white font-mono">Rs {summary.totals.totalStake.toLocaleString()}</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
-                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1 text-sky-400">Dealer Comm. Burn</div>
-                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {summary.totals.totalDealerCommission.toLocaleString()}</div>
-                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Agency network payouts</div>
+                    <div className="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1 text-sky-400">Total Commission</div>
+                    <div className="text-2xl font-black text-sky-400 font-mono">Rs {(summary.totals.totalDealerCommission + summary.totals.totalUserCommission).toLocaleString()}</div>
+                    <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Dealer + Player Payouts</div>
                 </div>
                 <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700">
                     <div className="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Total Payouts</div>
@@ -864,9 +864,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           <LedgersView 
             admin={admin} 
             dealers={dealers} 
+            users={users}
+            fetchWithAuth={fetchWithAuth}
             topUpDealerWallet={topUpDealerWallet} 
             withdrawFromDealerWallet={withdrawFromDealerWallet}
-            onRefresh={() => onRefreshData?.()}
+            onRefresh={() => { if (onRefreshData) onRefreshData(); }}
           />
       )}
       {activeTab === 'bettingsheet' && (

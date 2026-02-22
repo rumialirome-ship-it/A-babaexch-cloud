@@ -388,11 +388,20 @@ module.exports = {
             let stake = 0, payouts = 0, userComm = 0, dealerComm = 0;
             bets.forEach(b => {
                 stake += b.totalAmount;
-                const user = db.prepare('SELECT commissionRate, prizeRates FROM users WHERE id = ?').get(b.userId);
-                const dealer = db.prepare('SELECT commissionRate FROM dealers WHERE id = ?').get(b.dealerId);
-                if (user) userComm += b.totalAmount * (user.commissionRate / 100);
-                if (dealer) dealerComm += b.totalAmount * (dealer.commissionRate / 100);
-                if (g.winningNumber && !g.winningNumber.includes('_') && user) payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
+                const user = db.prepare('SELECT prizeRates FROM users WHERE id = ?').get(b.userId);
+                
+                // Use stored rates if available, otherwise fallback to current rates
+                const uRate = b.userCommissionRate !== null && b.userCommissionRate !== undefined ? b.userCommissionRate : 
+                             (db.prepare('SELECT commissionRate FROM users WHERE id = ?').get(b.userId)?.commissionRate || 0);
+                const dRate = b.dealerCommissionRate !== null && b.dealerCommissionRate !== undefined ? b.dealerCommissionRate : 
+                             (db.prepare('SELECT commissionRate FROM dealers WHERE id = ?').get(b.dealerId)?.commissionRate || 0);
+
+                userComm += b.totalAmount * (uRate / 100);
+                dealerComm += b.totalAmount * (dRate / 100);
+                
+                if (g.winningNumber && !g.winningNumber.includes('_') && user) {
+                    payouts += calculatePayout(b, g.winningNumber, g.name, user.prizeRates);
+                }
             });
             return { gameId: g.id, gameName: g.name, winningNumber: g.winningNumber || '-', totalStake: stake, totalPayouts: payouts, userCommission: userComm, dealerCommission: dealerComm - userComm, netProfit: stake - payouts - dealerComm };
         });
