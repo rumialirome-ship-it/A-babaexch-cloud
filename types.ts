@@ -88,6 +88,8 @@ export interface Bet {
   amountPerNumber: number;
   totalAmount: number;
   timestamp: Date;
+  userCommissionRate?: number;
+  dealerCommissionRate?: number;
 }
 
 export interface NumberLimit {

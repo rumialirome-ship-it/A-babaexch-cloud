@@ -36,7 +36,11 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
 const RevenueDashboard: React.FC<{ dealer: Dealer; bets: Bet[] }> = ({ dealer, bets }) => {
     const stats = useMemo(() => {
         const totalVolume = (bets || []).reduce((sum, b) => sum + b.totalAmount, 0);
-        const commissionEarned = totalVolume * (dealer.commissionRate / 100);
+        const commissionEarned = (bets || []).reduce((sum, b) => {
+            const dr = b.dealerCommissionRate ?? dealer.commissionRate;
+            const ur = b.userCommissionRate ?? 0;
+            return sum + (b.totalAmount * ((dr - ur) / 100));
+        }, 0);
         return { totalVolume, commissionEarned, betCount: (bets || []).length };
     }, [bets, dealer]);
     return (
