@@ -182,7 +182,7 @@ const LedgersView: React.FC<{
 
                 <div className="bg-slate-800/40 p-6 rounded-2xl border border-slate-700 shadow-xl overflow-hidden flex flex-col">
                     <h4 className="text-sm font-black text-amber-400 uppercase tracking-widest mb-4">Dealer Portfolios</h4>
-                    <div className="overflow-y-auto max-h-[300px] no-scrollbar space-y-3">
+                    <div className="overflow-y-auto max-h-[200px] no-scrollbar space-y-3 mb-6">
                         {dealers.map(d => (
                             <div key={d.id} className="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-all">
                                 <div>
@@ -192,6 +192,22 @@ const LedgersView: React.FC<{
                                 <div className="text-right flex items-center gap-4">
                                     <div className="text-xs font-black text-emerald-400 font-mono">Rs {d.wallet.toLocaleString()}</div>
                                     <button onClick={() => fetchLedger(d.id, d.name)} className="p-2 text-cyan-400 hover:text-white transition-colors">{Icons.bookOpen}</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <h4 className="text-sm font-black text-sky-400 uppercase tracking-widest mb-4">User Portfolios</h4>
+                    <div className="overflow-y-auto max-h-[200px] no-scrollbar space-y-3">
+                        {users.map(u => (
+                            <div key={u.id} className="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-700/50 hover:border-sky-500/30 transition-all">
+                                <div>
+                                    <div className="text-xs font-black text-white uppercase">{u.name}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono uppercase">{u.id}</div>
+                                </div>
+                                <div className="text-right flex items-center gap-4">
+                                    <div className="text-xs font-black text-emerald-400 font-mono">Rs {u.wallet.toLocaleString()}</div>
+                                    <button onClick={() => fetchLedger(u.id, u.name)} className="p-2 text-sky-400 hover:text-white transition-colors">{Icons.bookOpen}</button>
                                 </div>
                             </div>
                         ))}

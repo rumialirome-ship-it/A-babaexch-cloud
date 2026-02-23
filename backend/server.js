@@ -229,7 +229,7 @@ app.put('/api/admin/games/:id/update-winner', authMiddleware, (req, res) => {
     res.json({ success: true }); 
 });
 app.post('/api/admin/games/:id/approve-payouts', authMiddleware, (req, res) => { 
-    const result = database.approvePayouts(req.params.id); 
+    const result = database.approvePayouts(req.params.id, req.user.id); 
     res.json(result); 
 });
 

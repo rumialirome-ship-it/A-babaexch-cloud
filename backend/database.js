@@ -440,33 +440,36 @@ module.exports = {
         db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
         return { success: true };
     },
-    approvePayouts: (gameId) => {
+    approvePayouts: (gameId, adminId) => {
         return db.transaction(() => {
             const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
             if (!game || !game.winningNumber || game.winningNumber.includes('_') || game.payoutsApproved) return { success: false };
-            const admin = db.prepare('SELECT id, wallet FROM admins LIMIT 1').get();
-            db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId).forEach(bet => {
+            
+            // Use provided adminId or fallback to first admin
+            const admin = adminId ? db.prepare('SELECT id, wallet FROM admins WHERE id = ?').get(adminId) : db.prepare('SELECT id, wallet FROM admins LIMIT 1').get();
+            
+            db.prepare('SELECT * FROM bets WHERE gameId = ?').all(gameId).forEach((bet, index) => {
                 const payout = calculatePayout(bet, game.winningNumber, game.name, bet.prizeRates);
                 if (payout > 0) {
-                    const ts = new Date().toISOString();
+                    const ts = new Date(Date.now() + index * 100).toISOString(); // Distinct timestamps
                     
                     if (admin) {
-                        // 1. Deduct from Admin Wallet
+                        // 1. DEBIT from Admin Wallet (Money Out)
                         db.prepare('UPDATE admins SET wallet = wallet - ? WHERE id = ?').run(payout, admin.id);
                         const aw = db.prepare('SELECT wallet FROM admins WHERE id = ?').get(admin.id).wallet;
-                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Prize Payout: ${game.name} to ${bet.userId} (via ${bet.dealerId})`, payout, 0, aw);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Prize Payout: ${game.name} to User ${bet.userId} (via ${bet.dealerId})`, payout, 0, aw);
 
-                        // 2. Hierarchical Ledger for Dealer (Wallet NOT touched as per "direct transfer" request)
+                        // 2. Hierarchical Ledger for Dealer (Audit Trail Only - Balance Unchanged)
                         const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(bet.dealerId);
                         if (currentDealer) {
                             db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', ts, `Prize Received: ${game.name} from Admin`, 0, payout, currentDealer.wallet);
-                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', new Date(new Date(ts).getTime()+1).toISOString(), `Prize Paid: ${bet.userId} (Direct)`, payout, 0, currentDealer.wallet);
+                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', new Date(new Date(ts).getTime()+10).toISOString(), `Prize Paid: ${bet.userId} (Direct)`, payout, 0, currentDealer.wallet);
                         }
 
-                        // 3. Credit User Wallet Directly
+                        // 3. CREDIT to User Wallet (Money In)
                         db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, bet.userId);
                         const uw = db.prepare('SELECT wallet FROM users WHERE id = ?').get(bet.userId).wallet;
-                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId, 'USER', new Date(new Date(ts).getTime()+2).toISOString(), `Draw Winner: ${game.name} (${game.winningNumber}) from Admin`, 0, payout, uw);
+                        db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId, 'USER', new Date(new Date(ts).getTime()+20).toISOString(), `Draw Winner: ${game.name} (${game.winningNumber}) - Prize from Admin`, 0, payout, uw);
                     }
                 }
             });
