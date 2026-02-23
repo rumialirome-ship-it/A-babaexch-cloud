@@ -152,7 +152,10 @@ const calculatePayout = (bet, winningNumber, gameName, prizeRates) => {
     });
 
     if (winningCount === 0) return 0;
-    const rates = typeof prizeRates === 'string' ? safeJsonParse(prizeRates) : prizeRates;
+    let rates = typeof prizeRates === 'string' ? safeJsonParse(prizeRates) : prizeRates;
+    // Robustness: handle double-stringified rates
+    if (typeof rates === 'string') rates = safeJsonParse(rates);
+    
     if (!rates) return 0;
     const rate = bet.subGameType === '1 Digit Open' ? (rates.oneDigitOpen || 0) : 
                 (bet.subGameType === '1 Digit Close' ? (rates.oneDigitClose || 0) : (rates.twoDigit || 0));
@@ -287,12 +290,15 @@ module.exports = {
     },
     placeBet: (userId, data) => {
         return db.transaction(() => {
-            const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-            if (!user) throw new Error("User record not found");
-            const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(user.dealerId);
-            if (!dealer) throw new Error("Dealer record not found");
+            const userRaw = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+            if (!userRaw) throw new Error("User record not found");
+            const user = normalizeAccount(userRaw, 'users');
             
-            const limits = safeJsonParse(user.betLimits) || { oneDigit: 10000, twoDigit: 10000, perDraw: 50000 };
+            const dealerRaw = db.prepare('SELECT * FROM dealers WHERE id = ?').get(user.dealerId);
+            if (!dealerRaw) throw new Error("Dealer record not found");
+            const dealer = normalizeAccount(dealerRaw, 'dealers');
+            
+            const limits = user.betLimits || { oneDigit: 10000, twoDigit: 10000, perDraw: 50000 };
             
             let currentUserWallet = user.wallet;
             
