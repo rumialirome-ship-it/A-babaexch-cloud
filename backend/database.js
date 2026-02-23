@@ -465,14 +465,7 @@ module.exports = {
                         const aw = db.prepare('SELECT wallet FROM admins WHERE id = ?').get(admin.id).wallet;
                         db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), admin.id, 'ADMIN', ts, `Prize Payout: ${game.name} to User ${bet.userId} (via ${bet.dealerId})`, payout, 0, aw);
 
-                        // 2. Hierarchical Ledger for Dealer (Audit Trail Only - Balance Unchanged)
-                        const currentDealer = db.prepare('SELECT wallet FROM dealers WHERE id = ?').get(bet.dealerId);
-                        if (currentDealer) {
-                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', ts, `Prize Received: ${game.name} from Admin`, 0, payout, currentDealer.wallet);
-                            db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.dealerId, 'DEALER', new Date(new Date(ts).getTime()+10).toISOString(), `Prize Paid: ${bet.userId} (Direct)`, payout, 0, currentDealer.wallet);
-                        }
-
-                        // 3. CREDIT to User Wallet (Money In)
+                        // 2. CREDIT to User Wallet (Money In)
                         db.prepare('UPDATE users SET wallet = wallet + ? WHERE id = ?').run(payout, bet.userId);
                         const uw = db.prepare('SELECT wallet FROM users WHERE id = ?').get(bet.userId).wallet;
                         db.prepare('INSERT INTO ledgers (id, accountId, accountType, timestamp, description, debit, credit, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), bet.userId, 'USER', new Date(new Date(ts).getTime()+20).toISOString(), `Draw Winner: ${game.name} (${game.winningNumber}) - Prize from Admin`, 0, payout, uw);
