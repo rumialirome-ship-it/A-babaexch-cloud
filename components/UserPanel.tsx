@@ -453,7 +453,7 @@ const GameCard: React.FC<{ game: Game; onPlay: (game: Game) => void; isRestricte
                     )}
                 </div>
             </div>
-            <button onClick={() => onPlay(game)} disabled={!isPlayable} className="w-full mt-2 bg-sky-600 text-white font-bold py-2.5 px-4 rounded-md transition-all duration-300 enabled:hover:bg-sky-500 enabled:hover:shadow-lg enabled:hover:shadow-sky-500/30 disabled:bg-slate-700 disabled:cursor-not-allowed active:scale-95 shadow-lg">
+            <button onClick={() => onPlay(game)} disabled={!isPlayable} className="w-full mt-2 bg-sky-600 text-white font-bold py-2.5 px-4 rounded-md transition-all duration-300 enabled:hover:bg-sky-500 enabled:hover:shadow-lg enabled:hover:shadow-sky-500/30 disabled:bg-slate-700 disabled:cursor-not-allowed active:scale-95 shadow-lg btn-interactive">
                 PLAY NOW
             </button>
         </div>
@@ -789,7 +789,7 @@ const BettingModal: React.FC<BettingModalProps> = ({ game, games, user, onClose,
                             </div>
                             <div className="flex gap-3">
                                 <button onClick={() => setIsConfirming(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg border border-slate-700 transition-all uppercase tracking-widest text-xs active:translate-y-0.5">Back</button>
-                                <button onClick={handleBet} disabled={isSubmitting} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-lg shadow-lg transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:translate-y-0.5">{isSubmitting ? (<div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>) : "CONFIRM & PAY"}</button>
+                                <button onClick={handleBet} disabled={isSubmitting} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-lg shadow-lg transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:translate-y-0.5 btn-interactive">{isSubmitting ? (<div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>) : "CONFIRM & PAY"}</button>
                             </div>
                         </div>
                     ) : (

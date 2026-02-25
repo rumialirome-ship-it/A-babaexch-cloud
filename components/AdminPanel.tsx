@@ -1039,7 +1039,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ) : (
                                         <div className="flex items-center gap-3 animate-fade-in">
                                             <input type="text" maxLength={2} autoFocus value={winnerInputMap[game.id] || ''} onChange={(e) => setWinnerInputMap({...winnerInputMap, [game.id]: e.target.value})} className="bg-slate-800 border border-slate-600 rounded-xl w-24 p-3 text-center text-4xl font-mono font-black text-white focus:ring-2 focus:ring-cyan-500 shadow-inner" placeholder="--" />
-                                            <button onClick={() => handleDeclareAction(game.id, winnerInputMap[game.id], !!winningNumber)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-90 transition-all">SET</button>
+                                            <button onClick={() => handleDeclareAction(game.id, winnerInputMap[game.id], !!winningNumber)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-90 transition-all btn-interactive">SET</button>
                                         </div>
                                     )}
                                 </div>
@@ -1052,7 +1052,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ) : game.winningNumber && !game.winningNumber.endsWith('_') ? (
                                          <button 
                                             onClick={() => handleManualPayout(game.id)}
-                                            className="flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 border border-amber-500/30 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg active:scale-95 transition-all"
+                                            className="flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 border border-amber-500/30 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg active:scale-95 transition-all btn-interactive"
                                          >
                                             Pay Amount to Winner
                                         </button>

@@ -115,7 +115,7 @@ const LoginPanel: React.FC<{ onForgotPassword: () => void }> = ({ onForgotPasswo
                         </div>
                     </div>
                     {error && <p className="text-[10px] text-red-400 font-bold bg-red-500/10 p-2 rounded border border-red-500/20">{error}</p>}
-                    <button type="submit" className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg text-xs uppercase tracking-widest bg-gradient-to-r ${activeRole.theme.button} hover:scale-105 active:scale-95 active:brightness-90`}>
+                    <button type="submit" className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg text-xs uppercase tracking-widest bg-gradient-to-r ${activeRole.theme.button} hover:scale-105 active:scale-95 active:brightness-90 btn-interactive`}>
                         Authenticate
                     </button>
                 </form>
