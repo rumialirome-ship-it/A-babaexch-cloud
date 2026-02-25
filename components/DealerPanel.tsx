@@ -485,7 +485,7 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
                         if (isAKC) {
                             type = SubGameType.OneDigitClose;
                         } else {
-                            type = isOneOpen ? SubGameType.OneDigitOpen : (isOneClose ? SubGameType.OneDigitClose : (isTwo ? SubGameType.TwoDigit : null));
+                            type = isOneOpen ? SubGameType.OneDigitOpen : (isOneClose && !isAK ? SubGameType.OneDigitClose : (isTwo ? SubGameType.TwoDigit : null));
                         }
 
                         if (type) {
