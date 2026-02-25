@@ -450,7 +450,8 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
         try {
             const user = users.find(u => u.id === selectedUserId);
             const game = games.find(g => g.id === selectedGameId);
-            const isSingleDigitOnly = game?.name === 'AK' || game?.name === 'AKC';
+            const isAKC = game?.name === 'AKC';
+            const isAK = game?.name === 'AK';
             
             const lines = bulkInput.split('\n').filter(l => l.trim());
             const betGroupsMap = new Map();
@@ -462,7 +463,7 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
                 if (stake <= 0) return;
                 let betPart = currentLine.substring(0, stakeMatch ? stakeMatch.index : currentLine.length).trim();
                 
-                const isCombo = !isSingleDigitOnly && /\b(k|combo)\b/i.test(betPart); 
+                const isCombo = !isAKC && /\b(k|combo)\b/i.test(betPart); 
                 betPart = betPart.replace(/\b(k|combo)\b/i, '').trim();
                 const tokens = betPart.split(delimiterRegex).filter(Boolean);
                 
@@ -477,12 +478,12 @@ const BettingTerminalView: React.FC<{ users: User[]; games: Game[]; placeBetAsDe
                         }
                     } else {
                         const isOneOpen = /^\d[xX]$/i.test(token); 
-                        const isOneClose = /^[xX]\d$/i.test(token) || (/^[xX]?\d$/.test(token) && isSingleDigitOnly);
-                        const isTwo = !isSingleDigitOnly && /^\d{1,2}$/.test(token);
+                        const isOneClose = /^[xX]\d$/i.test(token) || (/^[xX]?\d$/.test(token) && isAKC);
+                        const isTwo = !isAKC && /^\d{1,2}$/.test(token);
                         
                         let type = null;
-                        if (isSingleDigitOnly) {
-                            type = game.name === 'AK' ? SubGameType.OneDigitOpen : SubGameType.OneDigitClose;
+                        if (isAKC) {
+                            type = SubGameType.OneDigitClose;
                         } else {
                             type = isOneOpen ? SubGameType.OneDigitOpen : (isOneClose ? SubGameType.OneDigitClose : (isTwo ? SubGameType.TwoDigit : null));
                         }

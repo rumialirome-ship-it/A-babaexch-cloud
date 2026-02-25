@@ -441,9 +441,40 @@ module.exports = {
     },
     declareWinner: (gameId, num) => {
         let val = String(num).trim();
-        const gName = db.prepare('SELECT name FROM games WHERE id = ?').get(gameId).name;
+        const game = db.prepare('SELECT name, winningNumber FROM games WHERE id = ?').get(gameId);
+        if (!game) return { success: false, message: 'Game not found' };
+        const gName = game.name;
+
         if (gName !== 'AK' && gName !== 'AKC' && val.length === 1 && val !== '') val = '0' + val;
         db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val, gameId);
+
+        // Sync AK and AKC
+        if (gName === 'AKC') {
+            const akGame = db.prepare("SELECT id, winningNumber FROM games WHERE name = 'AK'").get();
+            if (akGame) {
+                let akNum = akGame.winningNumber || '';
+                let openDigit = '_';
+                if (akNum.length === 2) openDigit = akNum[0];
+                else if (akNum.length === 1) openDigit = akNum[0];
+                
+                const newVal = openDigit + val;
+                db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(newVal, akGame.id);
+            }
+        } else if (gName === 'AK') {
+            const akcGame = db.prepare("SELECT id, winningNumber FROM games WHERE name = 'AKC'").get();
+            if (akcGame) {
+                if (val.length === 2) {
+                    // If AK is 2 digits, update AKC with the second digit
+                    db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val[1], akcGame.id);
+                } else if (val.length === 1) {
+                    // If AK is 1 digit, check if AKC already has a value to complete the 2-digit number
+                    if (akcGame.winningNumber && akcGame.winningNumber.length === 1) {
+                        db.prepare('UPDATE games SET winningNumber = ? WHERE id = ?').run(val + akcGame.winningNumber, gameId);
+                    }
+                }
+            }
+        }
+
         return { success: true };
     },
     approvePayouts: (gameId, adminId) => {
