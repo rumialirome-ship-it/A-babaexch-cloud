@@ -312,8 +312,21 @@ module.exports = {
                     if (user.fixedStake > 0) bg.amountPerNumber = user.fixedStake;
                     totalCost += bg.numbers.length * bg.amountPerNumber;
                     bg.numbers.forEach(num => {
-                        const limit = bg.subGameType.includes('1 Digit') ? limits.oneDigit : limits.twoDigit;
-                        const existing = db.prepare('SELECT SUM(amountPerNumber) as sum FROM bets WHERE userId = ? AND gameId = ? AND numbers LIKE ?').get(user.id, game.id, `%${num}%`);
+                        const isOneDigit = bg.subGameType.includes('1 Digit');
+                        const limit = isOneDigit ? limits.oneDigit : limits.twoDigit;
+                        
+                        // Separate limits for 1-digit and 2-digit games
+                        const subGameFilter = isOneDigit 
+                            ? "subGameType LIKE '%1 Digit%'" 
+                            : "subGameType NOT LIKE '%1 Digit%'";
+
+                        // Use JSON-aware matching to avoid partial matches (e.g., '5' matching '55')
+                        const existing = db.prepare(`
+                            SELECT SUM(amountPerNumber) as sum 
+                            FROM bets 
+                            WHERE userId = ? AND gameId = ? AND numbers LIKE ? AND ${subGameFilter}
+                        `).get(user.id, game.id, `%"${num}"%`);
+                        
                         if (((existing.sum || 0) + bg.amountPerNumber) > limit) throw new Error(`Limit Exceeded for ${num}`);
                     });
                 });
