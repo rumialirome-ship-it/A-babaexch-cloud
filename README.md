@@ -19,12 +19,59 @@ The files you see in the AI Studio side panel correspond to specific locations i
 
 ---
 
-## 🚀 Deployment to Google Cloud Run
-Run the included deployment script to push your code to the cloud:
+## 💰 Google Cloud Pricing (Estimated)
+
+Google Cloud offers a generous **Free Tier**. For a small to medium betting app, your monthly cost is likely to be **$0 to $10**, depending on traffic.
+
+| Service | Free Tier | Cost After Free Tier |
+| :--- | :--- | :--- |
+| **Cloud Run** | 2M requests/mo | ~$0.01 per 10k requests |
+| **Cloud Build** | 120 mins/day | $0.003 per minute |
+| **Artifact Registry** | 0.5 GB storage | $0.10 per GB/mo |
+| **Networking** | 1 GB egress/mo | $0.12 per GB |
+
+> [!CAUTION]
+> **SQLite Persistence Warning**: By default, Cloud Run containers are "stateless." This means if your app restarts or scales down, **your SQLite database will be wiped**. 
+> **Solution**: For a real production app, you should migrate to **Google Cloud SQL (Postgres/MySQL)** or use a **Persistent Disk** mount.
+
+---
+
+## 🚀 Step-by-Step Deployment Guide
+
+Follow these exact steps to get your app live on Google Cloud:
+
+### 1. Prepare Your Environment
+1.  Open [Google Cloud Console](https://console.cloud.google.com/).
+2.  Create a **New Project** (e.g., `ababa-exchange`).
+3.  Enable **Billing** for your project.
+4.  Open the **Cloud Shell** (the `>_` icon in the top right).
+
+### 2. Upload Your Code
+1.  In Cloud Shell, create a directory: `mkdir ababa && cd ababa`
+2.  Upload your files from AI Studio to this folder.
+3.  Ensure you have the `Dockerfile` and `deploy.sh` in the root.
+
+### 3. Initialize GCloud
+Run this in the Cloud Shell terminal:
 ```bash
+gcloud init
+```
+*Select your project and default region (e.g., `us-central1` or `asia-east1`).*
+
+### 4. Run the Deployment Script
+```bash
+# Make the script executable
 chmod +x deploy.sh
+
+# Run the deployment
 ./deploy.sh
 ```
+*This script will build your Docker image, push it to the registry, and deploy it to Cloud Run.*
+
+### 5. Set Environment Variables
+In the Cloud Run console, go to **Edit & Deploy New Revision** > **Variables & Secrets**:
+- Add `GEMINI_API_KEY` (if using AI features).
+- Add any other keys defined in your `.env.example`.
 
 ---
 

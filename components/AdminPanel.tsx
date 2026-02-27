@@ -35,7 +35,7 @@ interface FinancialSummary {
     netProfit: number;
   };
   dealerBookings: { name: string; total: number }[];
-  typeBookings: { twoDigit: number; oneDigit: number };
+  typeBookings: { twoDigit: number; oneDigitOpen: number; oneDigitClose: number };
   topPlayers: { name: string; total: number }[];
 }
 
@@ -680,14 +680,18 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <h4 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
                         <span className="text-cyan-400">{Icons.bookOpen}</span> Booking by Type
                     </h4>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                             <div className="text-[10px] text-slate-500 font-black uppercase mb-1">2 Digit Amount</div>
                             <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.twoDigit.toLocaleString()}</div>
                         </div>
                         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
-                            <div className="text-[10px] text-slate-500 font-black uppercase mb-1">1 Digit Amount</div>
-                            <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.oneDigit.toLocaleString()}</div>
+                            <div className="text-[10px] text-amber-500 font-black uppercase mb-1">1 Digit Open</div>
+                            <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.oneDigitOpen.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                            <div className="text-[10px] text-rose-500 font-black uppercase mb-1">1 Digit Close</div>
+                            <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.oneDigitClose.toLocaleString()}</div>
                         </div>
                     </div>
                 </div>

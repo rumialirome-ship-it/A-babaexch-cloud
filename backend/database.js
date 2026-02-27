@@ -410,7 +410,7 @@ module.exports = {
         const dealerBookings = {};
         dealers.forEach(d => dealerBookings[d.id] = { name: d.name, total: 0 });
 
-        const typeBookings = { twoDigit: 0, oneDigit: 0 };
+        const typeBookings = { twoDigit: 0, oneDigitOpen: 0, oneDigitClose: 0 };
         const userStakes = {};
         users.forEach(u => userStakes[u.id] = { name: u.name, total: 0 });
 
@@ -424,8 +424,10 @@ module.exports = {
                     dealerBookings[b.dealerId].total += b.totalAmount;
                 }
 
-                if (b.subGameType.includes('1 Digit')) {
-                    typeBookings.oneDigit += b.totalAmount;
+                if (b.subGameType === '1 Digit Open') {
+                    typeBookings.oneDigitOpen += b.totalAmount;
+                } else if (b.subGameType === '1 Digit Close') {
+                    typeBookings.oneDigitClose += b.totalAmount;
                 } else {
                     typeBookings.twoDigit += b.totalAmount;
                 }
