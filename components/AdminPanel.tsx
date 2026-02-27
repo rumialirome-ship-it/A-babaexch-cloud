@@ -34,6 +34,9 @@ interface FinancialSummary {
     totalDealerCommission: number;
     netProfit: number;
   };
+  dealerBookings: { name: string; total: number }[];
+  typeBookings: { twoDigit: number; oneDigit: number };
+  topPlayers: { name: string; total: number }[];
 }
 
 interface NumberSummaryData {
@@ -668,6 +671,57 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
                     <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest mb-1">Net Profit</div>
                     <div className={`text-2xl font-black font-mono ${summary.totals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>Rs {summary.totals.netProfit.toLocaleString()}</div>
                     <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">Stake - Payouts - Dealer Commission</div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Booking by Type */}
+                <div className="bg-slate-800/40 rounded-2xl border border-slate-700 p-6">
+                    <h4 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="text-cyan-400">{Icons.bookOpen}</span> Booking by Type
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                            <div className="text-[10px] text-slate-500 font-black uppercase mb-1">2 Digit Amount</div>
+                            <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.twoDigit.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                            <div className="text-[10px] text-slate-500 font-black uppercase mb-1">1 Digit Amount</div>
+                            <div className="text-xl font-black text-white font-mono">Rs {summary.typeBookings.oneDigit.toLocaleString()}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top Players */}
+                <div className="bg-slate-800/40 rounded-2xl border border-slate-700 p-6">
+                    <h4 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="text-amber-400">{Icons.star}</span> Top Players (by Stake)
+                    </h4>
+                    <div className="space-y-2 max-h-[150px] overflow-y-auto no-scrollbar">
+                        {summary.topPlayers.map((player, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-2 bg-slate-900/30 rounded-lg border border-slate-800">
+                                <span className="text-xs font-black text-slate-300 uppercase">{player.name}</span>
+                                <span className="text-xs font-black text-emerald-400 font-mono">Rs {player.total.toLocaleString()}</span>
+                            </div>
+                        ))}
+                        {summary.topPlayers.length === 0 && <div className="text-center text-slate-600 text-[10px] uppercase font-bold py-4">No data</div>}
+                    </div>
+                </div>
+            </div>
+
+            {/* Total Booking by Dealer */}
+            <div className="bg-slate-800/40 rounded-2xl border border-slate-700 p-6">
+                <h4 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="text-sky-400">{Icons.userGroup}</span> Total Booking by Dealer
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {summary.dealerBookings.map((dealer, idx) => (
+                        <div key={idx} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                            <div className="text-[10px] font-black text-slate-400 uppercase truncate mr-2">{dealer.name}</div>
+                            <div className="text-sm font-black text-white font-mono">Rs {dealer.total.toLocaleString()}</div>
+                        </div>
+                    ))}
+                    {summary.dealerBookings.length === 0 && <div className="col-span-full text-center text-slate-600 text-[10px] uppercase font-bold py-4">No dealer bookings detected</div>}
                 </div>
             </div>
 

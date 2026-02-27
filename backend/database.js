@@ -404,14 +404,38 @@ module.exports = {
     },
     getFinancialSummary: () => {
         const games = db.prepare('SELECT * FROM games').all();
+        const dealers = db.prepare('SELECT id, name FROM dealers').all();
+        const users = db.prepare('SELECT id, name FROM users').all();
+        
+        const dealerBookings = {};
+        dealers.forEach(d => dealerBookings[d.id] = { name: d.name, total: 0 });
+
+        const typeBookings = { twoDigit: 0, oneDigit: 0 };
+        const userStakes = {};
+        users.forEach(u => userStakes[u.id] = { name: u.name, total: 0 });
+
         const summaries = games.map(g => {
             const bets = db.prepare('SELECT * FROM bets WHERE gameId = ?').all(g.id);
             let stake = 0, payouts = 0, userComm = 0, dealerComm = 0;
             bets.forEach(b => {
                 stake += b.totalAmount;
+                
+                if (dealerBookings[b.dealerId]) {
+                    dealerBookings[b.dealerId].total += b.totalAmount;
+                }
+
+                if (b.subGameType.includes('1 Digit')) {
+                    typeBookings.oneDigit += b.totalAmount;
+                } else {
+                    typeBookings.twoDigit += b.totalAmount;
+                }
+
+                if (userStakes[b.userId]) {
+                    userStakes[b.userId].total += b.totalAmount;
+                }
+
                 const user = db.prepare('SELECT prizeRates FROM users WHERE id = ?').get(b.userId);
                 
-                // Use stored rates if available, otherwise fallback to current rates
                 const uRate = b.userCommissionRate !== null && b.userCommissionRate !== undefined ? b.userCommissionRate : 
                              (db.prepare('SELECT commissionRate FROM users WHERE id = ?').get(b.userId)?.commissionRate || 0);
                 const dRate = b.dealerCommissionRate !== null && b.dealerCommissionRate !== undefined ? b.dealerCommissionRate : 
@@ -426,7 +450,24 @@ module.exports = {
             });
             return { gameId: g.id, gameName: g.name, winningNumber: g.winningNumber || '-', totalStake: stake, totalPayouts: payouts, dealerCommission: dealerComm, netProfit: stake - payouts - dealerComm };
         });
-        return { games: summaries, totals: summaries.reduce((acc, s) => ({ totalStake: acc.totalStake + s.totalStake, totalPayouts: acc.totalPayouts + s.totalPayouts, totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, netProfit: acc.netProfit + s.netProfit }), { totalStake: 0, totalPayouts: 0, totalDealerCommission: 0, netProfit: 0 }) };
+
+        const topPlayers = Object.values(userStakes)
+            .filter(u => u.total > 0)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+
+        return { 
+            games: summaries, 
+            totals: summaries.reduce((acc, s) => ({ 
+                totalStake: acc.totalStake + s.totalStake, 
+                totalPayouts: acc.totalPayouts + s.totalPayouts, 
+                totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, 
+                netProfit: acc.netProfit + s.netProfit 
+            }), { totalStake: 0, totalPayouts: 0, totalDealerCommission: 0, netProfit: 0 }),
+            dealerBookings: Object.values(dealerBookings).filter(d => d.total > 0),
+            typeBookings,
+            topPlayers
+        };
     },
     getDetailedWinners: () => {
         const games = db.prepare('SELECT * FROM games WHERE winningNumber IS NOT NULL').all();
