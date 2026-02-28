@@ -128,7 +128,9 @@ app.put('/api/admin/games/:id/draw-time', authMiddleware, (req, res) => {
 });
 
 app.post('/api/dealer/users', authMiddleware, (req, res) => {
-    database.createUser({ ...req.body.userData, dealerId: req.user.id, wallet: req.body.initialDeposit });
+    // Force initialDeposit to 0 for dealers to ensure they use the top-up feature 
+    // which correctly deducts from their own wallet.
+    database.createUser({ ...req.body.userData, dealerId: req.user.id, wallet: 0 });
     res.json({ success: true });
 });
 

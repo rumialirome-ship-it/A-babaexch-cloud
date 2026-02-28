@@ -352,10 +352,11 @@ const UserForm: React.FC<{ user?: User, onSave: (u: any, o?: string, i?: number)
                             <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
                         </div>
                     </div>
-                    <div>
+                    {/* Wallet Balance hidden as per request - dealers must use Top-up feature */}
+                    {/* <div>
                         <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">Wallet Balance (Rs)</label>
                         <input type="number" value={initialDeposit} onChange={e => setInitialDeposit(Number(e.target.value))} placeholder="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
-                    </div>
+                    </div> */}
                     <div>
                         <label className="block text-[10px] text-slate-500 font-black uppercase mb-1">User Commission Rate (%)</label>
                         <input type="number" step="0.1" value={commissionRate} onChange={e => setCommissionRate(Number(e.target.value))} placeholder="0" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm focus:ring-1 focus:ring-emerald-500" />
