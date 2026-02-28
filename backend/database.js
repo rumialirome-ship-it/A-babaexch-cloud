@@ -402,8 +402,8 @@ module.exports = {
             return { success: true };
         })();
     },
-    getFinancialSummary: () => {
-        const games = db.prepare('SELECT * FROM games').all();
+    getFinancialSummary: (gameId = null) => {
+        const games = gameId ? db.prepare('SELECT * FROM games WHERE id = ?').all(gameId) : db.prepare('SELECT * FROM games').all();
         const dealers = db.prepare('SELECT id, name FROM dealers').all();
         const users = db.prepare('SELECT id, name FROM users').all();
         
@@ -466,7 +466,7 @@ module.exports = {
                 totalDealerCommission: acc.totalDealerCommission + s.dealerCommission, 
                 netProfit: acc.netProfit + s.netProfit 
             }), { totalStake: 0, totalPayouts: 0, totalDealerCommission: 0, netProfit: 0 }),
-            dealerBookings: Object.values(dealerBookings).filter(d => d.total > 0),
+            dealerBookings: Object.values(dealerBookings).filter(d => d.total > 0).sort((a, b) => b.total - a.total),
             typeBookings,
             topPlayers
         };

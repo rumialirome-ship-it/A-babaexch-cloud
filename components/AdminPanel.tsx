@@ -603,17 +603,25 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any 
     );
 };
 
-const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
+const StakesView: React.FC<{ fetchWithAuth: any; games: Game[] }> = ({ fetchWithAuth, games }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [loading, setLoading] = useState(true);
+    const [selectedGameId, setSelectedGameId] = useState<string>('');
 
-    const loadSummary = async () => {
+    const loadSummary = async (gameId: string = '') => {
         setLoading(true);
         try {
-            const res = await fetchWithAuth('/api/admin/summary');
+            const url = gameId ? `/api/admin/summary?gameId=${gameId}` : '/api/admin/summary';
+            const res = await fetchWithAuth(url);
             if (res.ok) setSummary(await res.json());
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
+    };
+
+    const handleGameChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const gameId = e.target.value;
+        setSelectedGameId(gameId);
+        loadSummary(gameId);
     };
 
     const handleDownloadBackup = async () => {
@@ -636,20 +644,35 @@ const StakesView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
         }
     };
 
-    useEffect(() => { loadSummary(); }, []);
+    useEffect(() => { loadSummary(selectedGameId); }, []);
 
     if (loading) return <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Aggregating Ledger...</div>;
     if (!summary) return null;
 
     return (
         <div className="space-y-6 animate-fade-in">
-             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-black text-white uppercase tracking-widest">Financial Summary</h3>
-                <div className="flex gap-2">
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex flex-col">
+                    <h3 className="text-xl font-black text-white uppercase tracking-widest">Financial Summary</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                        {selectedGameId ? `Filtering by: ${games.find(g => g.id === selectedGameId)?.name}` : 'All Markets Combined'}
+                    </p>
+                </div>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <select 
+                        value={selectedGameId} 
+                        onChange={handleGameChange}
+                        className="bg-slate-800 border border-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl px-4 py-2 focus:ring-1 focus:ring-emerald-500 outline-none min-w-[150px]"
+                    >
+                        <option value="">All Games</option>
+                        {games.map(g => (
+                            <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                    </select>
                     <button onClick={handleDownloadBackup} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-sky-400 font-black text-[10px] uppercase transition-all border border-slate-700 flex items-center gap-2">
                         {Icons.clipboardList} Export System
                     </button>
-                    <button onClick={loadSummary} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-emerald-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh</button>
+                    <button onClick={() => loadSummary(selectedGameId)} className="px-4 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 text-emerald-400 font-black text-[10px] uppercase transition-all active:scale-90 border border-slate-700">Refresh</button>
                 </div>
             </div>
 
@@ -928,7 +951,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} />}
+      {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} games={games} />}
       {activeTab === 'live' && <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'ledgers' && (
           <LedgersView 
