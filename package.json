@@ -2,9 +2,8 @@
   "name": "ababa-frontend",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node backend/server.js",
     "build": "vite build",
     "gcp-build": "vite build",
     "preview": "vite preview",
@@ -12,11 +11,18 @@
     "start": "node backend/server.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "twilio": "^5.12.2"
+    "twilio": "^5.12.2",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",

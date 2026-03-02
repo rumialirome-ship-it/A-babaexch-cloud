@@ -338,11 +338,27 @@ const checkAndSendWhatsAppReports = async () => {
     }
 };
 
-database.connect();
+const { createServer: createViteServer } = require('vite');
+
+async function startServer() {
+    database.connect();
+
+    if (process.env.NODE_ENV !== 'production') {
+        const vite = await createViteServer({
+            server: { middlewareMode: true },
+            appType: 'spa',
+        });
+        app.use(vite.middlewares);
+    }
+
+    server.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+        console.log(`>>> SERVER ACTIVE ON PORT ${process.env.PORT || 3000} <<<`);
+    });
+}
+
+startServer();
 
 setInterval(() => {
     database.performDailyCleanup();
     checkAndSendWhatsAppReports();
 }, 60000);
-
-server.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`>>> SERVER ACTIVE WITH SOCKETS <<<`));
