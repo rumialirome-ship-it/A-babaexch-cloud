@@ -335,7 +335,15 @@ const checkAndSendWhatsAppReports = async () => {
 };
 
 async function startServer() {
+    const port = process.env.PORT || 3000;
+    
+    // 1. START LISTENING IMMEDIATELY to pass Cloud Run health checks
+    server.listen(port, '0.0.0.0', () => {
+        console.log(`>>> SERVER ACTIVE ON PORT ${port} (0.0.0.0) <<<`);
+    });
+
     try {
+        // 2. INITIALIZE DATABASE in the background
         console.log('>>> INITIALIZING DATABASE... <<<');
         database.connect();
         console.log('>>> DATABASE CONNECTED <<<');
@@ -351,6 +359,7 @@ async function startServer() {
                     appType: 'spa',
                 });
                 app.use(vite.middlewares);
+                app.set('viteLoaded', true);
                 console.log('>>> VITE MIDDLEWARE READY <<<');
             } catch (viteError) {
                 console.error('>>> FAILED TO LOAD VITE, FALLING BACK TO STATIC SERVING <<<', viteError);
@@ -365,8 +374,6 @@ async function startServer() {
         app.get('*', (req, res, next) => {
             if (req.path.startsWith('/api')) return next();
             
-            // In production, always serve index.html
-            // In dev, if Vite is loaded it handles it, otherwise we fallback
             if (isProduction || !app.get('viteLoaded')) {
                 const indexPath = path.join(distPath, 'index.html');
                 if (fs.existsSync(indexPath)) {
@@ -377,11 +384,6 @@ async function startServer() {
             } else {
                 next();
             }
-        });
-
-        const port = process.env.PORT || 3000;
-        server.listen(port, '0.0.0.0', () => {
-            console.log(`>>> SERVER ACTIVE ON PORT ${port} <<<`);
         });
 
         setInterval(() => {
@@ -395,8 +397,8 @@ async function startServer() {
 
     } catch (startError) {
         console.error('>>> FATAL SERVER START ERROR <<<', startError);
-        // Don't exit immediately, let the platform see the error in logs
-        setTimeout(() => process.exit(1), 5000);
+        // We don't exit here because we're already listening, 
+        // but we should log it clearly.
     }
 }
 

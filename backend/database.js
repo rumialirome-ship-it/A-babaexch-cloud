@@ -4,8 +4,8 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = path.join(__dirname, 'database.sqlite');
-const JSON_DB_PATH = path.join(__dirname, 'db.json');
+const DB_PATH = process.env.DATABASE_URL || path.join(process.cwd(), 'database.sqlite');
+const JSON_DB_PATH = path.join(process.cwd(), 'db.json');
 let db;
 
 function isGameOpen(drawTime) {
