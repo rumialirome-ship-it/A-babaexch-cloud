@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { Role, User, Dealer, Admin, Game, Bet, LedgerEntry, SubGameType, PrizeRates } from './types';
 import { Icons, GAME_LOGOS } from './constants';
 import LandingPage from './components/LandingPage';
@@ -65,16 +66,7 @@ const AppContent: React.FC = () => {
     const [activeReveal, setActiveReveal] = useState<{ name: string; number: string } | null>(null);
     const lastGamesRef = useRef<Game[]>([]);
     const isFetchingRef = useRef(false);
-
-    const parseAllDates = (data: any) => {
-        if (!data) return data;
-        const parseLedger = (ledger: LedgerEntry[] = []) => ledger.map(e => ({...e, timestamp: new Date(e.timestamp)}));
-        if (data.users && Array.isArray(data.users)) data.users = data.users.map((u: User) => u ? ({...u, ledger: parseLedger(u.ledger)}) : null).filter(Boolean);
-        if (data.dealers && Array.isArray(data.dealers)) data.dealers = data.dealers.map((d: Dealer) => d ? ({...d, ledger: parseLedger(d.ledger)}) : null).filter(Boolean);
-        if (data.bets && Array.isArray(data.bets)) data.bets = data.bets.map((b: Bet) => ({...b, timestamp: new Date(b.timestamp)}));
-        if (data.account && data.account.ledger) data.account.ledger = parseLedger(data.account.ledger);
-        return data;
-    };
+    const socketRef = useRef<any>(null);
 
     const fetchPublicData = useCallback(async () => {
         try {
@@ -124,6 +116,44 @@ const AppContent: React.FC = () => {
     }, [fetchPublicData, fetchPrivateData]);
 
     useEffect(() => {
+        // Initialize socket connection
+        const socket = io(window.location.origin);
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            console.log('Connected to real-time server');
+        });
+
+        socket.on('betPlaced', () => {
+            console.log('New bet detected, refreshing...');
+            refreshAllData();
+        });
+
+        socket.on('winnerDeclared', () => {
+            console.log('Winner declared, refreshing...');
+            refreshAllData();
+        });
+
+        socket.on('payoutsApproved', () => {
+            console.log('Payouts approved, refreshing...');
+            refreshAllData();
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [refreshAllData]);
+
+    const parseAllDates = (data: any) => {
+        if (!data) return data;
+        const parseLedger = (ledger: LedgerEntry[] = []) => ledger.map(e => ({...e, timestamp: new Date(e.timestamp)}));
+        if (data.users && Array.isArray(data.users)) data.users = data.users.map((u: User) => u ? ({...u, ledger: parseLedger(u.ledger)}) : null).filter(Boolean);
+        if (data.dealers && Array.isArray(data.dealers)) data.dealers = data.dealers.map((d: Dealer) => d ? ({...d, ledger: parseLedger(d.ledger)}) : null).filter(Boolean);
+        if (data.bets && Array.isArray(data.bets)) data.bets = data.bets.map((b: Bet) => ({...b, timestamp: new Date(b.timestamp)}));
+        if (data.account && data.account.ledger) data.account.ledger = parseLedger(data.account.ledger);
+        return data;
+    };
+    useEffect(() => {
         if (!loading && verifyData) {
             const parsed = parseAllDates(verifyData);
             if (parsed.users) setUsers(parsed.users);
@@ -135,14 +165,14 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         fetchPublicData();
-        const interval = setInterval(fetchPublicData, 20000); // 20s for snappier updates
+        const interval = setInterval(fetchPublicData, 60000); // 60s fallback
         return () => clearInterval(interval);
     }, [fetchPublicData]);
 
     useEffect(() => {
         if (role) {
             fetchPrivateData();
-            const interval = setInterval(fetchPrivateData, 20000); // 20s for snappier updates
+            const interval = setInterval(fetchPrivateData, 60000); // 60s fallback
             return () => clearInterval(interval);
         } else {
             setHasInitialFetched(false);

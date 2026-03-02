@@ -9,6 +9,20 @@ const authMiddleware = require('./authMiddleware');
 const database = require('./database');
 
 const app = express();
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+app.set('io', io);
+
+io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
+});
 
 app.use((req, res, next) => {
     const host = req.headers.host;
@@ -164,7 +178,9 @@ app.delete('/api/dealer/users/:id', authMiddleware, (req, res) => {
 
 app.post('/api/user/bets', authMiddleware, (req, res) => {
     try {
-        res.json(database.placeBet(req.user.id, req.body));
+        const result = database.placeBet(req.user.id, req.body);
+        req.app.get('io').emit('betPlaced', { userId: req.user.id, bet: result });
+        res.json(result);
     } catch (e) {
         res.status(400).json({ message: e.message });
     }
@@ -174,7 +190,9 @@ app.post('/api/dealer/bets/bulk', authMiddleware, (req, res) => {
     try {
         const user = database.findAccountById(req.body.userId, 'users');
         if (user && user.dealerId.toLowerCase() === req.user.id.toLowerCase()) {
-            res.json(database.placeBet(req.body.userId, req.body));
+            const result = database.placeBet(req.body.userId, req.body);
+            req.app.get('io').emit('betPlaced', { userId: req.body.userId, bet: result });
+            res.json(result);
         } else {
             res.status(403).json({ message: 'Unauthorized terminal access' });
         }
@@ -228,13 +246,19 @@ app.put('/api/admin/accounts/:type/:id/toggle-restriction', authMiddleware, (req
     res.json({ success: true });
 });
 
-app.post('/api/admin/games/:id/declare-winner', authMiddleware, (req, res) => { database.declareWinner(req.params.id, req.body.winningNumber); res.json({ success: true }); });
+app.post('/api/admin/games/:id/declare-winner', authMiddleware, (req, res) => { 
+    database.declareWinner(req.params.id, req.body.winningNumber); 
+    req.app.get('io').emit('winnerDeclared', { gameId: req.params.id, winningNumber: req.body.winningNumber });
+    res.json({ success: true }); 
+});
 app.put('/api/admin/games/:id/update-winner', authMiddleware, (req, res) => { 
     database.declareWinner(req.params.id, req.body.newWinningNumber); 
+    req.app.get('io').emit('winnerDeclared', { gameId: req.params.id, winningNumber: req.body.newWinningNumber });
     res.json({ success: true }); 
 });
 app.post('/api/admin/games/:id/approve-payouts', authMiddleware, (req, res) => { 
     const result = database.approvePayouts(req.params.id, req.user.id); 
+    req.app.get('io').emit('payoutsApproved', { gameId: req.params.id });
     res.json(result); 
 });
 
@@ -259,4 +283,4 @@ setInterval(() => {
     database.performDailyCleanup();
 }, 60000);
 
-app.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`>>> SERVER ACTIVE <<<`));
+server.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`>>> SERVER ACTIVE WITH SOCKETS <<<`));
