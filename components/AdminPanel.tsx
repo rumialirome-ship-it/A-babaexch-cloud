@@ -438,7 +438,7 @@ const BettingSheetView: React.FC<{
     );
 };
 
-const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any, bets: Bet[] }> = ({ games, dealers, fetchWithAuth, bets }) => {
+const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any }> = ({ games, dealers, fetchWithAuth }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [gameId, setGameId] = useState('');
     const [dealerId, setDealerId] = useState('');
@@ -448,7 +448,7 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any,
     const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
     const loadData = async () => {
-        // Don't set loading to true for background refreshes
+        setLoading(true);
         try {
             const params = new URLSearchParams();
             if (date) params.append('date', date);
@@ -476,7 +476,7 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any,
         setQuery('');
     };
 
-    useEffect(() => { loadData(); }, [date, gameId, dealerId, query, bets]);
+    useEffect(() => { loadData(); }, [date, gameId, dealerId, query]);
 
     return (
         <div className="space-y-10 animate-fade-in">
@@ -603,13 +603,13 @@ const LiveView: React.FC<{ games: Game[], dealers: Dealer[], fetchWithAuth: any,
     );
 };
 
-const StakesView: React.FC<{ fetchWithAuth: any; games: Game[]; bets: Bet[] }> = ({ fetchWithAuth, games, bets }) => {
+const StakesView: React.FC<{ fetchWithAuth: any; games: Game[] }> = ({ fetchWithAuth, games }) => {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedGameId, setSelectedGameId] = useState<string>('');
 
     const loadSummary = async (gameId: string = '') => {
-        // Don't set loading to true for background refreshes to avoid flicker
+        setLoading(true);
         try {
             const url = gameId ? `/api/admin/summary?gameId=${gameId}` : '/api/admin/summary';
             const res = await fetchWithAuth(url);
@@ -644,7 +644,7 @@ const StakesView: React.FC<{ fetchWithAuth: any; games: Game[]; bets: Bet[] }> =
         }
     };
 
-    useEffect(() => { loadSummary(selectedGameId); }, [selectedGameId, bets]);
+    useEffect(() => { loadSummary(selectedGameId); }, []);
 
     if (loading) return <div className="p-20 text-center animate-pulse text-slate-500 font-black uppercase text-xs">Aggregating Ledger...</div>;
     if (!summary) return null;
@@ -852,7 +852,7 @@ const WinnersView: React.FC<{ fetchWithAuth: any }> = ({ fetchWithAuth }) => {
 };
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ 
-  admin, dealers, users, games, bets, declareWinner, updateWinner, approvePayouts, topUpDealerWallet, withdrawFromDealerWallet, toggleAccountRestriction, updateGameDrawTime, onRefreshData, onSaveDealer 
+  admin, dealers, users, games, declareWinner, updateWinner, approvePayouts, topUpDealerWallet, withdrawFromDealerWallet, toggleAccountRestriction, updateGameDrawTime, onRefreshData, onSaveDealer 
 }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [winnerInputMap, setWinnerInputMap] = useState<Record<string, string>>({});
@@ -951,8 +951,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} games={games} bets={bets} />}
-      {activeTab === 'live' && <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} bets={bets} />}
+      {activeTab === 'dashboard' && <StakesView fetchWithAuth={fetchWithAuth} games={games} />}
+      {activeTab === 'live' && <LiveView games={games} dealers={dealers} fetchWithAuth={fetchWithAuth} />}
       {activeTab === 'ledgers' && (
           <LedgersView 
             admin={admin} 
