@@ -97,7 +97,8 @@ const connect = () => {
             })();
         }
     } catch (error) {
-        process.exit(1);
+        console.error('DATABASE CONNECTION ERROR:', error);
+        throw error;
     }
 };
 

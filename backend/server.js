@@ -5,6 +5,7 @@ const cors = require('cors');
 const compression = require('compression');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs');
 const authMiddleware = require('./authMiddleware');
 const database = require('./database');
 const { sendWhatsAppReport } = require('./whatsappService');
@@ -334,37 +335,69 @@ const checkAndSendWhatsAppReports = async () => {
 };
 
 async function startServer() {
-    database.connect();
+    try {
+        console.log('>>> INITIALIZING DATABASE... <<<');
+        database.connect();
+        console.log('>>> DATABASE CONNECTED <<<');
 
-    if (process.env.NODE_ENV !== 'production') {
-        const { createServer: createViteServer } = require('vite');
-        const vite = await createViteServer({
-            server: { middlewareMode: true },
-            appType: 'spa',
-        });
-        app.use(vite.middlewares);
-    } else {
-        app.use(express.static(distPath));
-    }
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging';
 
-    // Catch-all route for SPA
-    app.get('*', (req, res, next) => {
-        if (req.path.startsWith('/api')) return next();
-        if (process.env.NODE_ENV === 'production') {
-            res.sendFile(path.join(distPath, 'index.html'));
+        if (!isProduction) {
+            try {
+                console.log('>>> STARTING VITE IN DEVELOPMENT MODE... <<<');
+                const { createServer: createViteServer } = require('vite');
+                const vite = await createViteServer({
+                    server: { middlewareMode: true },
+                    appType: 'spa',
+                });
+                app.use(vite.middlewares);
+                console.log('>>> VITE MIDDLEWARE READY <<<');
+            } catch (viteError) {
+                console.error('>>> FAILED TO LOAD VITE, FALLING BACK TO STATIC SERVING <<<', viteError);
+                app.use(express.static(distPath));
+            }
         } else {
-            next();
+            console.log('>>> SERVING STATIC FILES IN PRODUCTION MODE... <<<');
+            app.use(express.static(distPath));
         }
-    });
 
-    server.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-        console.log(`>>> SERVER ACTIVE ON PORT ${process.env.PORT || 3000} <<<`);
-    });
+        // Catch-all route for SPA
+        app.get('*', (req, res, next) => {
+            if (req.path.startsWith('/api')) return next();
+            
+            // In production, always serve index.html
+            // In dev, if Vite is loaded it handles it, otherwise we fallback
+            if (isProduction || !app.get('viteLoaded')) {
+                const indexPath = path.join(distPath, 'index.html');
+                if (fs.existsSync(indexPath)) {
+                    res.sendFile(indexPath);
+                } else {
+                    res.status(404).send('Application not built. Please run npm run build.');
+                }
+            } else {
+                next();
+            }
+        });
 
-    setInterval(() => {
-        database.performDailyCleanup();
-        checkAndSendWhatsAppReports();
-    }, 60000);
+        const port = process.env.PORT || 3000;
+        server.listen(port, '0.0.0.0', () => {
+            console.log(`>>> SERVER ACTIVE ON PORT ${port} <<<`);
+        });
+
+        setInterval(() => {
+            try {
+                database.performDailyCleanup();
+                checkAndSendWhatsAppReports();
+            } catch (intervalError) {
+                console.error('>>> ERROR IN BACKGROUND TASKS <<<', intervalError);
+            }
+        }, 60000);
+
+    } catch (startError) {
+        console.error('>>> FATAL SERVER START ERROR <<<', startError);
+        // Don't exit immediately, let the platform see the error in logs
+        setTimeout(() => process.exit(1), 5000);
+    }
 }
 
 startServer();
