@@ -279,11 +279,6 @@ app.post('/api/user/ai-lucky-pick', authMiddleware, (req, res) => {
 });
 
 const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
-app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(distPath, 'index.html'));
-});
 
 const checkAndSendWhatsAppReports = async () => {
     const now = new Date();
@@ -338,27 +333,38 @@ const checkAndSendWhatsAppReports = async () => {
     }
 };
 
-const { createServer: createViteServer } = require('vite');
-
 async function startServer() {
     database.connect();
 
     if (process.env.NODE_ENV !== 'production') {
+        const { createServer: createViteServer } = require('vite');
         const vite = await createViteServer({
             server: { middlewareMode: true },
             appType: 'spa',
         });
         app.use(vite.middlewares);
+    } else {
+        app.use(express.static(distPath));
     }
+
+    // Catch-all route for SPA
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        if (process.env.NODE_ENV === 'production') {
+            res.sendFile(path.join(distPath, 'index.html'));
+        } else {
+            next();
+        }
+    });
 
     server.listen(process.env.PORT || 3000, '0.0.0.0', () => {
         console.log(`>>> SERVER ACTIVE ON PORT ${process.env.PORT || 3000} <<<`);
     });
+
+    setInterval(() => {
+        database.performDailyCleanup();
+        checkAndSendWhatsAppReports();
+    }, 60000);
 }
 
 startServer();
-
-setInterval(() => {
-    database.performDailyCleanup();
-    checkAndSendWhatsAppReports();
-}, 60000);
