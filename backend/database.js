@@ -1,7 +1,6 @@
 
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
 const DB_PATH = process.env.DATABASE_URL || path.join(process.cwd(), 'database.sqlite');
@@ -30,6 +29,7 @@ function isGameOpen(drawTime) {
 
 const connect = () => {
     try {
+        const Database = require('better-sqlite3');
         const dir = path.dirname(DB_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         db = new Database(DB_PATH);

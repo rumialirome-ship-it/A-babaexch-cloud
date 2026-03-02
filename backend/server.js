@@ -19,6 +19,17 @@ const io = require('socket.io')(server, {
     }
 });
 
+// 1. HEALTH CHECK ROUTE - Responds immediately
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
+// 2. START LISTENING IMMEDIATELY
+const port = parseInt(process.env.PORT || '3000', 10);
+console.log(`>>> ATTEMPTING TO LISTEN ON 0.0.0.0:${port} <<<`);
+server.listen(port, '0.0.0.0', () => {
+    console.log(`>>> SERVER IS LISTENING ON 0.0.0.0:${port} <<<`);
+    console.log(`>>> CLOUD RUN PORT: ${process.env.PORT} <<<`);
+});
+
 app.set('io', io);
 
 io.on('connection', (socket) => {
