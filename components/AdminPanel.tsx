@@ -863,9 +863,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [selectedDealer, setSelectedDealer] = useState<Dealer | undefined>(undefined);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [tempTime, setTempTime] = useState<string>('');
-  const [editingReportId, setEditingReportId] = useState<string | null>(null);
-  const [tempReportTime, setTempReportTime] = useState<string>('');
-  const [tempWhatsapp, setTempWhatsapp] = useState<string>('');
 
   const { fetchWithAuth } = useAuth();
 
@@ -928,19 +925,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       } catch (e) {
           alert("Time update failed.");
       }
-  };
-
-  const handleSaveReportSettings = async (gameId: string) => {
-    try {
-        await fetchWithAuth(`/api/admin/games/${gameId}/report-settings`, {
-            method: 'PUT',
-            body: JSON.stringify({ reportTime: tempReportTime, whatsappNumber: tempWhatsapp })
-        });
-        setEditingReportId(null);
-        if (onRefreshData) await onRefreshData();
-    } catch (e) {
-        alert("Failed to save report settings.");
-    }
   };
 
   const tabs = [
@@ -1141,7 +1125,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     )}
                                 </div>
 
-                                 <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-2">
                                     {game.payoutsApproved ? (
                                         <div className="flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center shadow-inner">
                                             <span className="text-xs">✓</span> Prizes Disbursed
@@ -1156,63 +1140,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ) : (
                                         <div className="flex items-center justify-center gap-2 bg-slate-900/50 border border-slate-800 text-slate-500 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-center">
                                             Awaiting Declaration
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="pt-4 mt-4 border-t border-slate-700/50">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Auto WhatsApp Report</label>
-                                        {editingReportId === game.id ? (
-                                            <div className="flex gap-2">
-                                                <button onClick={() => handleSaveReportSettings(game.id)} className="text-emerald-400 text-[10px] font-black uppercase">Save</button>
-                                                <button onClick={() => setEditingReportId(null)} className="text-rose-400 text-[10px] font-black uppercase">Cancel</button>
-                                            </div>
-                                        ) : (
-                                            <button onClick={() => { setEditingReportId(game.id); setTempReportTime(game.reportTime || ''); setTempWhatsapp(game.whatsappNumber || ''); }} className="text-cyan-400 text-[10px] font-black uppercase hover:text-cyan-300 transition-colors">Configure</button>
-                                        )}
-                                    </div>
-                                    
-                                    {editingReportId === game.id ? (
-                                        <div className="space-y-3 animate-fade-in">
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label className="text-[8px] text-slate-600 font-bold uppercase block mb-1">Time</label>
-                                                    <input 
-                                                        type="time" 
-                                                        value={tempReportTime} 
-                                                        onChange={e => setTempReportTime(e.target.value)}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-white font-bold focus:ring-1 focus:ring-cyan-500"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[8px] text-slate-600 font-bold uppercase block mb-1">WhatsApp #</label>
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="e.g. 923001234567"
-                                                        value={tempWhatsapp} 
-                                                        onChange={e => setTempWhatsapp(e.target.value)}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-white font-bold focus:ring-1 focus:ring-cyan-500"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center justify-between bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-700/50">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[8px] text-slate-600 font-bold uppercase">Scheduled</span>
-                                                    <span className="text-[10px] text-slate-300 font-black">{game.reportTime || 'Not Set'}</span>
-                                                </div>
-                                                <div className="w-px h-6 bg-slate-700"></div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[8px] text-slate-600 font-bold uppercase">Recipient</span>
-                                                    <span className="text-[10px] text-slate-300 font-black truncate max-w-[100px]">{game.whatsappNumber || 'None'}</span>
-                                                </div>
-                                            </div>
-                                            {game.reportTime && game.whatsappNumber && (
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                            )}
                                         </div>
                                     )}
                                 </div>

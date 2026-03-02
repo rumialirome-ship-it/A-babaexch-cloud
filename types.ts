@@ -68,8 +68,6 @@ export interface Game {
   winningNumber?: string;
   payoutsApproved?: boolean;
   isMarketOpen?: boolean;
-  reportTime?: string;
-  whatsappNumber?: string;
 }
 
 export enum SubGameType {

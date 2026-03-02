@@ -1,10 +1,11 @@
 
 const path = require('path');
 const fs = require('fs');
+const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = process.env.DATABASE_URL || path.join(process.cwd(), 'database.sqlite');
-const JSON_DB_PATH = path.join(process.cwd(), 'db.json');
+const DB_PATH = path.join(__dirname, 'database.sqlite');
+const JSON_DB_PATH = path.join(__dirname, 'db.json');
 let db;
 
 function isGameOpen(drawTime) {
@@ -29,7 +30,6 @@ function isGameOpen(drawTime) {
 
 const connect = () => {
     try {
-        const Database = require('better-sqlite3');
         const dir = path.dirname(DB_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         db = new Database(DB_PATH);
@@ -41,7 +41,7 @@ const connect = () => {
             CREATE TABLE IF NOT EXISTS admins (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, password TEXT, wallet REAL, prizeRates TEXT, avatarUrl TEXT);
             CREATE TABLE IF NOT EXISTS dealers (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, password TEXT, area TEXT, contact TEXT, wallet REAL, commissionRate REAL, isRestricted INTEGER DEFAULT 0, prizeRates TEXT, avatarUrl TEXT);
             CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, password TEXT, dealerId TEXT COLLATE NOCASE, area TEXT, contact TEXT, wallet REAL, commissionRate REAL, isRestricted INTEGER DEFAULT 0, prizeRates TEXT, betLimits TEXT, fixedStake REAL DEFAULT 0, avatarUrl TEXT, FOREIGN KEY (dealerId) REFERENCES dealers(id));
-            CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, drawTime TEXT, winningNumber TEXT, payoutsApproved INTEGER DEFAULT 0, reportTime TEXT, whatsappNumber TEXT);
+            CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT, drawTime TEXT, winningNumber TEXT, payoutsApproved INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS bets (id TEXT PRIMARY KEY COLLATE NOCASE, userId TEXT COLLATE NOCASE, dealerId TEXT COLLATE NOCASE, gameId TEXT COLLATE NOCASE, subGameType TEXT, numbers TEXT, amountPerNumber REAL, totalAmount REAL, timestamp TEXT, userCommissionRate REAL, dealerCommissionRate REAL, prizeRates TEXT, FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (dealerId) REFERENCES dealers(id), FOREIGN KEY (gameId) REFERENCES games(id));
             CREATE TABLE IF NOT EXISTS ledgers (id TEXT PRIMARY KEY COLLATE NOCASE, accountId TEXT COLLATE NOCASE, accountType TEXT, timestamp TEXT, description TEXT, debit REAL, credit REAL, balance REAL);
             CREATE TABLE IF NOT EXISTS daily_resets (reset_date TEXT PRIMARY KEY);
@@ -59,12 +59,6 @@ const connect = () => {
         }
         if (!betTableInfo.find(c => c.name === 'prizeRates')) {
             db.exec("ALTER TABLE bets ADD COLUMN prizeRates TEXT");
-        }
-
-        const gameTableInfo = db.prepare("PRAGMA table_info(games)").all();
-        if (!gameTableInfo.find(c => c.name === 'reportTime')) {
-            db.exec("ALTER TABLE games ADD COLUMN reportTime TEXT");
-            db.exec("ALTER TABLE games ADD COLUMN whatsappNumber TEXT");
         }
 
         const checkCount = db.prepare("SELECT count(*) as count FROM admins").get();
@@ -97,8 +91,7 @@ const connect = () => {
             })();
         }
     } catch (error) {
-        console.error('DATABASE CONNECTION ERROR:', error);
-        throw error;
+        process.exit(1);
     }
 };
 
@@ -579,6 +572,5 @@ module.exports = {
         })();
     },
     updateGameDrawTime: (id, time) => db.prepare('UPDATE games SET drawTime = ? WHERE id = ?').run(time, id),
-    updateGameReportSettings: (id, reportTime, whatsappNumber) => db.prepare('UPDATE games SET reportTime = ?, whatsappNumber = ? WHERE id = ?').run(reportTime, whatsappNumber, id),
     deleteUser: (id) => db.prepare('DELETE FROM users WHERE id = ?').run(id)
 };
