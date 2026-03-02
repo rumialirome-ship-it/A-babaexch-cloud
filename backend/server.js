@@ -11,14 +11,17 @@ const server = http.createServer(app);
 app.get('/health', (req, res) => res.status(200).send('OK'));
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// 2. BIND TO PORT IMMEDIATELY
-// Cloud Run provides PORT environment variable (usually 8080)
+// 2. STATIC FILES & SPA (Register early to avoid 404s)
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// 3. BIND TO PORT IMMEDIATELY
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`>>> [HEALTHY] Server listening on 0.0.0.0:${PORT} <<<`);
 });
 
-// 3. LAZY LOAD EVERYTHING ELSE
+// 4. LAZY LOAD EVERYTHING ELSE
 async function initializeApp() {
     try {
         console.log('>>> Loading dependencies... <<<');
@@ -201,10 +204,7 @@ async function initializeApp() {
 
         app.get('/api/games', (req, res) => res.json(database.getAllFromTable('games')));
 
-        // --- STATIC FILES & SPA ---
-        const distPath = path.join(__dirname, '../dist');
-        app.use(express.static(distPath));
-        
+        // --- SPA CATCH-ALL (Register LAST) ---
         app.get('*', (req, res, next) => {
             if (req.path.startsWith('/api')) return next();
             const indexPath = path.join(distPath, 'index.html');
